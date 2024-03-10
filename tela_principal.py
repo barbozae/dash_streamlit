@@ -3,44 +3,26 @@ import time as time
 import datetime as datetime
 from streamlit_option_menu import option_menu
 from filtro import Filtros
+from conexao import Conexao
+import pandas as pd
 
+
+consulta = Conexao.conecta_bd()
+df_compras = consulta[1]
+fornecedor = consulta[2]
+grupo_produto = consulta[3]
+classificacao = consulta[4]
+numero_boleto = consulta[5]
+produto = consulta[6]
+id_compra = consulta[7]
+df_cadastro_funcionarios = consulta[8]
+nome_funcionario = consulta[9]
 
 class TelaPrincipal:
     def __init__(self):
         self.filtro = Filtros()
-        
-    def sidebar(self):       
-        varSideBar = st.sidebar.selectbox(
-            "Selecione o modal de Transporte:", ('Página Inicial', 'Lançamento Vendas', 'Lançamento Compras', 'Funcionários'))
-        
-        self.varDataInicial()
-        self.varDataFinal()
 
-        if varSideBar == 'Página Inicial':
-            pass
-        elif varSideBar == 'Lançamento Vendas':
-            pass
-        elif varSideBar == 'Funcionários':
-            pass
-
-        with st.sidebar:
-            varClientes = st.radio(
-                'Selecione o Cliente',
-                ('Iphone', 'Samsung', 'LG'))
-            
-            # varPeriodo = st.multiselect(
-            #     'Selecione o Período',
-            #     ('Almoço', 'Jantar'))
-            self.varPerido()
-            
-            varParcela = st.slider(
-                'Quantas parcelas deseja: ', 0, 60, 20)
-    
-    def varPerido(self):
-        self.filtro.varPeriodo = st.multiselect(
-                'Selecione o Período',
-                ('Almoço', 'Jantar'))
-
+    # FILTROS DATA
     def varDataInicial(self):
         # datas que inicia o sistema
         tempo = time.time()
@@ -49,13 +31,132 @@ class TelaPrincipal:
             self.filtro.data_inicial = st.date_input(
                 'Data inicial', 
                 datetime.date(tempo_local[0], tempo_local[1], 1), format='DD/MM/YYYY') 
-
+            
     def varDataFinal(self):
         with st.sidebar:
             self.filtro.data_final = st.date_input(
                 'Data final', 
                 datetime.date.today(), format='DD/MM/YYYY')
             
+    # FILTROS VENDAS
+    def varPeriodo(self):
+        self.filtro.varPeriodo = st.multiselect(
+                'Selecione o Período',
+                ('Almoço', 'Jantar'),
+                placeholder='Escolha o período')
+
+    # FILTROS COMPRAS
+    def varFornecedor(self):
+        self.filtro.varFornecedor = st.multiselect(           
+            'Selecione o Fornecedor', 
+            fornecedor,
+            placeholder='Escolha fornecedor')
+        
+    def varClassificacao(self):
+        self.filtro.varClassificacao = st.multiselect(
+            'Selecione a Classificação:',
+            classificacao,
+            placeholder='Escolha uma opção')
+
+    def varGrupoProduto(self):
+        self.filtro.varGrupoProduto = st.multiselect(
+            'Selecione o Grupo:',
+            grupo_produto,
+            placeholder='Escolha um grupo')
+        
+    def varProduto(self):
+        self.filtro.varProduto = st.multiselect(
+            'Selecione o Produto:',
+            produto,
+            placeholder='Escolha o produto')
+        
+    def varNumeroBoleto(self):
+        self.filtro.varNumeroBoleto = st.multiselect(
+            'Seleciona número do boleto',
+            numero_boleto,
+            placeholder='Digite número boleto')
+
+    def varFormaPagamento(self):
+        self.filtro.varFormaPagamento = st.multiselect(
+            'Selecione forma de pagaemnto',
+            df_compras['forma_pagamento'].unique()
+        )
+
+    def varIDCompra(self):
+        self.filtro.varIDCompra = st.multiselect(
+            'Selecione ID',
+            id_compra,
+            placeholder='Digite número ID')
+    
+    # FILTROS PESSOAS
+    def varNomeFunc(self):
+        self.filtro.varNomeFunc = st.multiselect(
+            'Nome Funcionário',
+            df_cadastro_funcionarios['nome'].unique(),
+            placeholder='Selecione Funcionários'
+        )
+    
+    def varCargo(self):
+        self.filtro.varCargo = st.multiselect(
+            'Cargo',
+            df_cadastro_funcionarios['cargo'].unique(),
+            default=[]
+,            placeholder='Selecione cargo'
+        )
+
+    def varSetor(self):
+        self.filtro.varSetor = st.multiselect(
+            'Setor', 
+            df_cadastro_funcionarios['setor'].unique(),
+            default=[],
+            placeholder='Selecione setor'
+        )
+
+    def varDataContratacao(self):
+        data = df_cadastro_funcionarios['data_contratacao'] = pd.to_datetime(df_cadastro_funcionarios['data_contratacao'], errors='coerce')
+        
+        # dropna() eu dropei as linhas nulas    
+        data = data.dropna().dt.strftime('%d/%m/%Y').unique()
+        self.filtro.varDataContratacao = st.multiselect(
+            'Data de Contratação',
+            data,
+            placeholder='Selecione data contratação'
+        )
+
+
+    # SIDERBAR
+    def sidebar_vendas(self):
+        with st.sidebar:
+            self.varDataInicial()
+            self.varDataFinal()
+            self.varPeriodo()
+
+    def sidebar_compras(self):
+        with st.sidebar:
+            self.varDataInicial()
+            self.varDataFinal()
+            self.varIDCompra()
+            self.varFornecedor()
+            self.varClassificacao()
+            self.varGrupoProduto()
+            self.varProduto()
+            self.varNumeroBoleto()
+            self.varFormaPagamento()
+    
+    def sidebar_pessoas(self):
+        with st.sidebar:
+            self.varDataInicial()
+            self.varDataFinal()
+            self.varNomeFunc()
+            self.varCargo()
+            self.varSetor()
+            self.varDataContratacao()
+
+    def sidebar_fechamento(self):
+        with st.sidebar:
+            self.varDataInicial()
+            self.varDataFinal()
+
     def home(self):
         # Sistema
         # st.title('Restaurante Fictício')
@@ -63,20 +164,31 @@ class TelaPrincipal:
         st.write('---------')
         
         # menu de navegação - é possivel colocar dentro do sideBar
-        selected = option_menu(
+        self.selected = option_menu(
         menu_title = 'Painel de Navegação',
         menu_icon = 'cast', # icone do titulo
-        options = ['Vendas', 'Compra e Pagamento', 'Pessoas', 'Fechamento'],
+        options = ['Vendas', 'Compras', 'Pessoas', 'Fechamento'],
         # link para consultar os nomes dos icones https://icons.getbootstrap.com/
         icons = ['receipt', 'wallet2', 'grid', 'bar-chart'],    # bell
         default_index = 0,
         orientation='horizontal')
         
-        if selected == 'Vendas':
+        if self.selected == 'Vendas':
+            self.sidebar_vendas()
             self.navegacao_vendas()
-        elif selected == 'Pagamentos':
+        elif self.selected == 'Compras':
+            self.sidebar_compras()
             self.navegacao_compras()
-        elif selected == 'Pessoas':
-            pass
+        elif self.selected == 'Pessoas':
+            self.sidebar_pessoas()
+            self.navegacao_funcionarios()
         else:
-            pass
+            self.sidebar_fechamento()
+            st.markdown('Resumo das Vendas')
+            self.cards_resumo_vendas()
+            st.write('---')
+            st.markdown('Resumo das Compras')
+            self.cards_resumo_compras()
+            st.write('---')
+            st.markdown('Resumo da Mão de Obra')
+            self.card_resumo_Fuc()

@@ -1,679 +1,814 @@
 import streamlit as st
-import altair as alt
 import pandas as pd
 import numpy as np
+import time
 from millify import millify
 from datetime import datetime
-from streamlit_metrics import metric # precisei intalar no terminal streamlit_metrics e a biblioteca millify
-import calendar
-from st_aggrid import AgGrid, GridOptionsBuilder
-gb = GridOptionsBuilder()
 from filtro import Filtros
+from conexao import Conexao
+
+
+consulta = Conexao.conecta_bd()
+df_compras = consulta[1]
+fornecedor = consulta[2]
+grupo_produto = consulta[3]
+classificacao = consulta[4]
+numero_boleto = consulta[5]
+produto = consulta[6]
+id_compra = consulta[7]
 
 
 class Compras: 
     def __init__(self) -> None:
         self.filtro = Filtros()
 
+
     def navegacao_compras(self):
         tab1, tab2, tab3 = st.tabs(["Resumo", "Lançamento", "Tabela Dinâmica"])
         with tab1:
             self.cards_resumo_compras()
-            self.graficos_compras()
-        with tab2:
-            st.subheader("Apontamento das compras")
-            self.lancamento_compras()
-            st.write('----------------')
-            st.subheader('A data de modificação esta sendo alterado na tabela inteira')
-            self.lancamento_compras_table()
-        with tab3:
-            self.tabela_dinamica_compras()
+            self.caixas_expansivas()
 
-    def dataframe_compras(self):
-        self.conecta_bd()
+        with tab2:
+            st.write("Apontamento das compras")
+            self.widget_compras()
+            with st.expander('Edição das compras', expanded=True):
+                self.lancamento_compras_table()
+        with tab3:
+            st.write('\
+                Em desenvolvimento...')
+
+    def indicadores_compras(self):
+        # Utilizado no arquivo resumo
+        # Filtrando data
+        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
+        data_final = str(self.filtro.data_final)
+    
+        filtro_data_compras = (df_compras['data_compra'] >= data_inicial) & (df_compras['data_compra'] <= data_final)
+    
+        valores_classificacao = df_compras[filtro_data_compras]
+
+        # Filtrando as linhas onde a coluna 'classificacao' é igual a 'cmv'
+        cmv = valores_classificacao[valores_classificacao['classificacao'] == 'CMV']
+        # Drop das colunas desnecessárias
+        cmv = cmv.drop(['data_compra', 'data_vencimento', 'data_pagamento', 'valor_pago', 'fornecedor', 'qtd', 
+                                        'numero_boleto', 'grupo_produto', 'produto', 'classificacao', 'forma_pagamento', 
+                                        'observacao', 'dt_atualizado', 'ID'], axis=1)
+        # self.cmv = cmv.astype(float).sum()
+
+        gasto_fixo = valores_classificacao[valores_classificacao['classificacao'] == 'Gasto Fixo']
+        # Drop das colunas desnecessárias
+        gasto_fixo = gasto_fixo.drop(['data_compra', 'data_vencimento', 'data_pagamento', 'valor_pago', 'fornecedor', 'qtd', 
+                                                    'numero_boleto', 'grupo_produto', 'produto', 'classificacao', 'forma_pagamento', 
+                                                    'observacao', 'dt_atualizado', 'ID'], axis=1)
+
+        gasto_variavel = valores_classificacao[valores_classificacao['classificacao'] == 'Gasto Variável']
+        # Drop das colunas desnecessárias
+        gasto_variavel = gasto_variavel.drop(['data_compra', 'data_vencimento', 'data_pagamento', 'valor_pago', 'fornecedor', 'qtd', 
+                                                    'numero_boleto', 'grupo_produto', 'produto', 'classificacao', 'forma_pagamento', 
+                                                    'observacao', 'dt_atualizado', 'ID'], axis=1)
+        array_cmv = np.array(cmv)
+        array_gasto_fixo = np.array(gasto_fixo)
+        array_gasto_variavel = np.array(gasto_variavel)
         
+        # substiturir valores vazios por nan e assim converter valores para float
+        array_cmv[array_cmv == ''] = 0
+        array_cmv = array_cmv.astype(float) 
+
+        array_gasto_fixo[array_gasto_fixo == ''] = 0
+        array_gasto_fixo = array_gasto_fixo.astype(float)
+
+        array_gasto_variavel[array_gasto_variavel == ''] = 0
+        array_gasto_variavel = array_gasto_variavel.astype(float)
+
+        # Somando todas as linhas por colunas
+        # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
+        self.cmv = np.nansum(array_cmv, axis=0)
+        self.gasto_fixo = np.nansum(array_gasto_fixo, axis=0)
+        self.gasto_variavel = np.nansum(array_gasto_variavel, axis=0)
+   
+    def dataframe_pagamentos(self):
         # colunas do banco
-        # data_venda, dinheiro, pix, debito_mastercard, debito_visa, debito_elo, credito_mastercard, credito_visa, credito_elo, hiper, 
-        # american_express, alelo, 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', qtd_rodizio, socio, periodo, dt_atualizado, ID"
+        # data_compra, data_vencimento, data_pagamento, fornecedor, valor_compra, valor_pago, qtd, numero_boleto, grupo_produto, 
+        # produto, classificacao, forma_pagamento, observacao, dt_atualizado"
         
         # Filtrando data
         data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
         data_final = str(self.filtro.data_final)
-        self.df_vendas['data_venda'] = pd.to_datetime(self.df_vendas['data_venda'], format='%Y-%m-%d')
+        df_pagamentos = df_compras   
+
+        filtro_data_pagamentos = (df_pagamentos['data_pagamento'] >= data_inicial) & (df_pagamentos['data_pagamento'] <= data_final)
         
-        filtro_data = (self.df_vendas['data_venda'] >= data_inicial) & (self.df_vendas['data_venda'] <= data_final)
-        
-        # filtrando periodo
-        # Verificar se a lista 'self.filtro.varPeriodo' está vazia
-        if self.filtro.varPeriodo:
-            filtro_periodo = self.df_vendas['periodo'].isin(self.filtro.varPeriodo)
+        # filtrando fornecedor
+        # Verificar se a lista 'self.filtro.varFornecedor' está vazia
+        if self.filtro.varFornecedor:
+            filtro_fornecedor = df_pagamentos['fornecedor'].isin(self.filtro.varFornecedor)
         else:
-            filtro_periodo = pd.Series([True] * len(self.df_vendas)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
+            filtro_fornecedor = pd.Series([True] * len(df_pagamentos)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
         
-        # aplicando os filtros data e periodo
-        self.valores_vendas = self.df_vendas[filtro_data & filtro_periodo]
+        if self.filtro.varClassificacao:
+            filtro_classificacao = df_pagamentos['classificacao'].isin(self.filtro.varClassificacao)
+        else:
+            filtro_classificacao = pd.Series([True] * len(df_pagamentos)) # se a lista estiver vazia, considera todos os valores como verdadeiros
 
-        # self.valores_vendas = [item for item in np.array(self.df_vendas) if datetime.strptime(item[0], '%d/%m/%Y').month == 7]
+        if self.filtro.varGrupoProduto:
+            filtro_grupo_produto = df_pagamentos['grupo_produto'].isin(self.filtro.varGrupoProduto)
+        else:
+            filtro_grupo_produto = pd.Series([True] * len(df_pagamentos)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+        
+        if self.filtro.varProduto:
+            filtro_produto = df_pagamentos['produto'].isin(self.filtro.varProduto)
+        else:
+            filtro_produto = pd.Series([True] * len(df_pagamentos))
 
-        self.df_vendas_valores = self.valores_vendas.drop(['data_venda', 'periodo', 'dt_atualizado', 'ID'], axis=1)
-        self.array_vendas = np.array(self.df_vendas_valores)
+        if self.filtro.varNumeroBoleto:
+            filtro_boleto = df_pagamentos['numero_boleto'].isin(self.filtro.varNumeroBoleto)
+        else:
+            filtro_boleto = pd.Series([True] * len(df_pagamentos)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varIDCompra:
+            filtro_ID_compra = df_pagamentos['ID'].isin(self.filtro.varIDCompra)
+        else:
+            filtro_ID_compra = pd.Series([True] * len(df_compras))
+
+        if self.filtro.varFormaPagamento:
+            filtro_forma_pagamento = df_compras['forma_pagamento'].isin(self.filtro.varFormaPagamento)
+        else:
+            filtro_forma_pagamento = pd.Series([True] * len(df_compras))
+    
+        # TABELAS DE PAGAMENTOS - aplicando os filtros
+        self.valores_pagamentos = df_pagamentos[filtro_data_pagamentos & filtro_fornecedor & filtro_classificacao & 
+                                                filtro_grupo_produto & filtro_produto & filtro_boleto & filtro_ID_compra &
+                                                filtro_forma_pagamento]
+
+        # total de pagamentos
+        df_pagamentos_valores = self.valores_pagamentos.drop(['data_compra', 'data_vencimento', 'data_pagamento','fornecedor', 'qtd', 
+                                                           'numero_boleto', 'grupo_produto', 'produto', 'classificacao','forma_pagamento', 
+                                                           'observacao', 'dt_atualizado', 'ID', 'valor_compra'], axis=1)
+    
+        self.array_pagamentos = np.array(df_pagamentos_valores)
 
         # garantir que array esta como string e assim poder aplicar replace
-        self.array_vendas = self.array_vendas.astype(str)
-        self.array_vendas = np.char.replace(self.array_vendas, ',', '.')
+        self.array_pagamentos = self.array_pagamentos.astype(str)
+        self.array_pagamentos = np.char.replace(self.array_pagamentos, ',', '.')    
+        
         # substiturir valores vazios por nan e assim converter valores para float
-        self.array_vendas[self.array_vendas == ''] = 0 #'nan'
-        self.array_vendas = self.array_vendas.astype(float)
+        self.array_pagamentos[self.array_pagamentos == ''] = 0
+        self.array_pagamentos = self.array_pagamentos.astype(float)
 
         # Somando todas as linhas por colunas
         # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
-        self.total_colunas = np.nansum(self.array_vendas, axis=0)
-        print(self.total_colunas)
-        self.dinheiro = self.total_colunas[0]
-        self.pix = self.total_colunas[1]
-        self.debito_martercard = self.total_colunas[2]
-        self.debito_visa = self.total_colunas[3]
-        self.debito_elo = self.total_colunas[4]
-        self.credito_mastercard = self.total_colunas[5]
-        self.credito_visa = self.total_colunas[6]
-        self.credito_elo = self.total_colunas[7]
-        self.hiper = self.total_colunas[8]
-        self.american_express = self.total_colunas[9]
-        self.alelo = self.total_colunas[10]
-        self.sodexo = self.total_colunas[11]
-        self.ticket_rest = self.total_colunas[12]
-        self.vale_refeicao = self.total_colunas[13]
-        self.dinersclub = self.total_colunas[14]
-        self.rodizio = int(self.total_colunas[15])
-        self.socio = self.total_colunas[16]
+        self.valor_pagamentos = np.nansum(self.array_pagamentos, axis=0)
+    
+    def dataframe_compras(self):
+        # colunas do banco
+        # data_compra, data_vencimento, data_pagamento, fornecedor, valor_compra, valor_pago, qtd, numero_boleto, grupo_produto, 
+        # produto, classificacao, forma_pagamento, observacao, dt_atualizado"
+        
+        # Filtrando data
+        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
+        data_final = str(self.filtro.data_final)
+        filtro_data_compras = (df_compras['data_compra'] >= data_inicial) & (df_compras['data_compra'] <= data_final)
+   
+        # filtrando fornecedor
+        # Verificar se a lista 'self.filtro.varFornecedor' está vazia
+        if self.filtro.varFornecedor:
+            filtro_fornecedor = df_compras['fornecedor'].isin(self.filtro.varFornecedor)
+        else:
+            filtro_fornecedor = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
+        
+        if self.filtro.varClassificacao:
+            filtro_classificacao = df_compras['classificacao'].isin(self.filtro.varClassificacao)
+        else:
+            filtro_classificacao = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
 
-        self.debito = self.debito_martercard + self.debito_visa + self.debito_elo
-        self.credito = self.credito_mastercard + self.credito_visa + self.credito_elo
-        self.outros_cartoes = self.hiper + self.american_express + self.alelo + self.sodexo + self.ticket_rest + self.vale_refeicao + self.dinersclub
-        self.total_vendas = self.dinheiro + self.pix + self.debito + self.credito + self.outros_cartoes
-        self.ticket_medio = self.total_vendas / self.rodizio
+        if self.filtro.varGrupoProduto:
+            filtro_grupo_produto = df_compras['grupo_produto'].isin(self.filtro.varGrupoProduto)
+        else:
+            filtro_grupo_produto = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+        
+        if self.filtro.varProduto:
+            filtro_produto = df_compras['produto'].isin(self.filtro.varProduto)
+        else:
+            filtro_produto = pd.Series([True] * len(df_compras))
 
-    def cards_resumo(self):
-        self.dataframe_vendas()
+        if self.filtro.varNumeroBoleto:
+            filtro_boleto = df_compras['numero_boleto'].isin(self.filtro.varNumeroBoleto)
+        else:
+            filtro_boleto = pd.Series([True] * len(df_compras)) 
+
+        if self.filtro.varIDCompra:
+            filtro_ID_compra = df_compras['ID'].isin(self.filtro.varIDCompra)
+        else:
+            filtro_ID_compra = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varFormaPagamento:
+            filtro_forma_pagamento = df_compras['forma_pagamento'].isin(self.filtro.varFormaPagamento)
+        else:
+            filtro_forma_pagamento = pd.Series([True] * len(df_compras))
+                   
+        # TABELAS COMPRAS - aplicando os filtros data e fornecedor
+        self.valores_compras = df_compras[filtro_data_compras & filtro_fornecedor & filtro_classificacao & 
+                                          filtro_grupo_produto & filtro_produto & filtro_boleto & filtro_ID_compra &
+                                          filtro_forma_pagamento]
+ 
+        df_compras_valores = self.valores_compras.drop(['data_compra', 'data_vencimento', 'data_pagamento','fornecedor', 'qtd', 
+                                                        'numero_boleto', 'grupo_produto', 'produto', 'classificacao','forma_pagamento', 
+                                                        'observacao', 'dt_atualizado', 'ID'], axis=1)
+       
+        array_compra = np.array(df_compras_valores)
+
+        # garantir que array esta como string e assim poder aplicar replace
+        array_compra = array_compra.astype(str)
+        array_compra = np.char.replace(array_compra, ',', '.') 
+        
+        # substiturir valores vazios por nan e assim converter valores para float
+        array_compra[array_compra == ''] = 0
+        array_compra = array_compra.astype(float) 
+
+        # Somando todas as linhas por colunas
+        # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
+        self.valor_compras = np.nansum(array_compra, axis=0)
+        # self.valor_pagamentos = np.nansum(self.array_pagamentos, axis=0
+
+    def dataframe_vencimento(self):
+        # colunas do banco
+        # data_compra, data_vencimento, data_pagamento, fornecedor, valor_compra, valor_pago, qtd, numero_boleto, grupo_produto, 
+        # produto, classificacao, forma_pagamento, observacao, dt_atualizado"
+        
+        # Filtrando data
+        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
+        data_final = str(self.filtro.data_final)
+
+        filtro_data_vencimento = (df_compras['data_vencimento'] >= data_inicial) & (df_compras['data_vencimento'] <= data_final)
+   
+        # filtrando fornecedor
+        # Verificar se a lista 'self.filtro.varFornecedor' está vazia
+        if self.filtro.varFornecedor:
+            filtro_fornecedor = df_compras['fornecedor'].isin(self.filtro.varFornecedor)
+        else:
+            filtro_fornecedor = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
+        
+        if self.filtro.varClassificacao:
+            filtro_classificacao = df_compras['classificacao'].isin(self.filtro.varClassificacao)
+        else:
+            filtro_classificacao = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varGrupoProduto:
+            filtro_grupo_produto = df_compras['grupo_produto'].isin(self.filtro.varGrupoProduto)
+        else:
+            filtro_grupo_produto = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varProduto:
+            filtro_produto = df_compras['produto'].isin(self.filtro.varProduto)
+        else:
+            filtro_produto = pd.Series([True] * len(df_compras))
+
+        if self.filtro.varNumeroBoleto:
+            filtro_boleto = df_compras['numero_boleto'].isin(self.filtro.varNumeroBoleto)
+        else:
+            filtro_boleto = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varIDCompra:
+            filtro_ID_compra = df_compras['ID'].isin(self.filtro.varIDCompra)
+        else:
+            filtro_ID_compra = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varFormaPagamento:
+            filtro_forma_pagamento = df_compras['forma_pagamento'].isin(self.filtro.varFormaPagamento)
+        else:
+            filtro_forma_pagamento = pd.Series([True] * len(df_compras))
+                                             
+        # TABELAS COMPRAS - aplicando os filtros data e fornecedor
+        self.df_vencimento = df_compras[filtro_data_vencimento & filtro_fornecedor & filtro_classificacao & 
+                                          filtro_grupo_produto & filtro_produto & filtro_boleto & filtro_ID_compra &
+                                          filtro_forma_pagamento]
+ 
+        df_pg_vencido = self.df_vencimento.drop(['data_compra', 'data_vencimento', 'data_pagamento','fornecedor', 'qtd', 
+                                                        'numero_boleto', 'grupo_produto', 'produto', 'classificacao','forma_pagamento', 
+                                                        'observacao', 'dt_atualizado', 'ID'], axis=1)
+       
+        array_pg_vencimento = np.array(df_pg_vencido)
+
+        # garantir que array esta como string e assim poder aplicar replace
+        array_pg_vencimento = array_pg_vencimento.astype(str)
+        array_pg_vencimento = np.char.replace(array_pg_vencimento, ',', '.') 
+        
+        # substiturir valores vazios por nan e assim converter valores para float
+        array_pg_vencimento[array_pg_vencimento == ''] = 0
+        array_pg_vencimento = array_pg_vencimento.astype(float) 
+
+        # Somando todas as linhas por colunas
+        # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
+        self.valores_vencimento = np.nansum(array_pg_vencimento, axis=0)
+        # self.valor_pagamentos = np.nansum(self.array_pagamentos, axis=0
+
+    def dataframe_vencido(self):
+        # colunas do banco
+        # data_compra, data_vencimento, data_pagamento, fornecedor, valor_compra, valor_pago, qtd, numero_boleto, grupo_produto, 
+        # produto, classificacao, forma_pagamento, observacao, dt_atualizado"
+        
+        # Filtrando data
+        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
+        data_final = str(self.filtro.data_final)
+
+        filtro_data_vencida = (
+            (df_compras['data_vencimento'] >= data_inicial) & \
+                (df_compras['data_vencimento'] <= data_final) & \
+                    (df_compras['data_pagamento'].isnull() | (df_compras['data_pagamento'] == ''))
+                         )
+        # filtrando fornecedor
+        # Verificar se a lista 'self.filtro.varFornecedor' está vazia
+        if self.filtro.varFornecedor:
+            filtro_fornecedor = df_compras['fornecedor'].isin(self.filtro.varFornecedor)
+        else:
+            filtro_fornecedor = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
+        
+        if self.filtro.varClassificacao:
+            filtro_classificacao = df_compras['classificacao'].isin(self.filtro.varClassificacao)
+        else:
+            filtro_classificacao = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varGrupoProduto:
+            filtro_grupo_produto = df_compras['grupo_produto'].isin(self.filtro.varGrupoProduto)
+        else:
+            filtro_grupo_produto = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varProduto:
+            filtro_produto = df_compras['produto'].isin(self.filtro.varProduto)
+        else:
+            filtro_produto = pd.Series([True] * len(df_compras))
+
+        if self.filtro.varNumeroBoleto:
+            filtro_boleto = df_compras['numero_boleto'].isin(self.filtro.varNumeroBoleto)
+        else:
+            filtro_boleto = pd.Series([True] * len(df_compras)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+
+        if self.filtro.varIDCompra:
+            filtro_ID_compra = df_compras['ID'].isin(self.filtro.varIDCompra)
+        else:
+            filtro_ID_compra = pd.Series([True] * len(df_compras))
+        
+        if self.filtro.varFormaPagamento:
+            filtro_forma_pagamento = df_compras['forma_pagamento'].isin(self.filtro.varFormaPagamento)
+        else:
+            filtro_forma_pagamento = pd.Series([True] * len(df_compras))
+
+        # TABELAS COMPRAS - aplicando os filtros data e fornecedor
+        self.df_compra_vencida = df_compras[filtro_data_vencida & filtro_fornecedor & filtro_classificacao & 
+                                          filtro_grupo_produto & filtro_produto & filtro_boleto & filtro_ID_compra &
+                                          filtro_forma_pagamento]
+ 
+        df_pg_vencido = self.df_compra_vencida.drop(['data_compra', 'data_vencimento', 'data_pagamento','fornecedor', 'qtd', 
+                                                        'numero_boleto', 'grupo_produto', 'produto', 'classificacao','forma_pagamento', 
+                                                        'observacao', 'dt_atualizado', 'ID'], axis=1)
+       
+        array_pg_vencido = np.array(df_pg_vencido)
+
+        # garantir que array esta como string e assim poder aplicar replace
+        array_pg_vencido = array_pg_vencido.astype(str)
+        array_pg_vencido = np.char.replace(array_pg_vencido, ',', '.') 
+        
+        # substiturir valores vazios por nan e assim converter valores para float
+        array_pg_vencido[array_pg_vencido == ''] = 0
+        array_pg_vencido = array_pg_vencido.astype(float) 
+
+        # Somando todas as linhas por colunas
+        # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
+        self.valor_vencido = np.nansum(array_pg_vencido, axis=0)
+        # self.valor_pagamentos = np.nansum(self.array_pagamentos, axis=0
+
+    def card_conta_vencida(self):
+        # Divide a tela em 4 colunas
+        col1, col2, col3, col4 = st.columns(4)
+
+        #BAD2DE
+        #CBE2DA
+        #E5F0EC
+        #f5f5f5 - light gray
+        #4CAF50 - green
+        #3498db - blue
+        
+        # Define card styles
+        card_style = """
+        <style>
+        .card {
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+            padding: 1px;
+            text-align: center;
+            background-color: #BAD2DE;   
+            margin: 8px;
+            max-width: 230px; /* Largura máxima do card */
+            width: 100%; /* Largura total do card */
+        }
+
+        .riders {
+            background-color: #BAD2DE;
+            color: gray;
+        }
+
+        .spatial-data {
+            background-color: #CBE2DA;
+            color: white;
+        }
+        </style>
+        """
+
+        # Aplica o estilo dos cards
+        st.markdown(card_style, unsafe_allow_html=True)
+
+        # Exibe os cards nas colunas
+        for index, row in self.df_compra_vencida.iterrows():
+            card = f"""
+            <div class="card conta em aberto">
+                <h2>{row['data_vencimento']}</h2>
+                <p>Fornecedor: <i> {row['fornecedor']} <i> </p>
+                <p>Grupo: <i> {row['grupo_produto']} <i> </p>
+                <p>Valor: <i> {row['valor_compra']} <i> </p>
+                <p>ID: <i> {row['ID']} <i> </p>
+            </div>
+            """
+            # Adiciona os cards nas colunas
+            if index % 4 == 0:
+                col1.write(card, unsafe_allow_html=True)
+            elif index % 4 == 1:
+                col2.write(card, unsafe_allow_html=True)
+            elif index % 4 == 2:
+                col3.write(card, unsafe_allow_html=True)
+            elif index % 4 == 3:
+                col4.write(card, unsafe_allow_html=True)
+            
+    def cards_resumo_compras(self):
+        self.dataframe_compras()
+        self.dataframe_pagamentos()
+        self.dataframe_vencimento()
+        self.dataframe_vencido()
+        self.indicadores_compras()
         # Cards das vendas
         # a função millify serve para abreviar o valor $8.000 para $8k
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric('Credito', '${}'.format(millify(self.credito)), '{:.4}%'.format(self.credito/self.total_vendas*100))
-        col2.metric('Débito', '${}'.format(millify(self.debito)), '{:.4}%'.format(self.debito/self.total_vendas*100))
-        col3.metric('Benefício', '${}'.format(millify(self.outros_cartoes)), '{:.4}%'.format(self.outros_cartoes/self.total_vendas*100), 
-                    help='Cartões: Hiper - American Express - Alelo, Sodexo - Vale Refeição - Ticket Rest - DinersClub')
-        col4.metric('Dinheiro', '${}'.format(millify(self.dinheiro)), '{:.4}%'.format(self.dinheiro/self.total_vendas*100))
-        col5.metric('Pix', '${}'.format(millify(self.pix)), '{:.4}%'.format(self.pix/self.total_vendas*100))
+        col1, col2, col3, col4, col5, col6  = st.columns(6)
+        col1.metric('Valor de Compra', '${}'.format(millify(self.valor_compras[0])))
+        # devido o filtro hora o valor é float e hora é escalar devido essa situação foi necessário realizar o if abaixo
+        col2.metric('Valor Pago', '${}'.format(millify(self.valor_pagamentos if np.isscalar(self.valor_pagamentos) 
+                                                       else self.valor_pagamentos[0])))
+        col3.metric('Valor a Pagar', '${}'.format(millify(self.valor_vencido if np.isscalar(self.valor_vencido)
+                                                            else self.valor_vencido[0])))
+        # Calcule o percentual
+        percentual_cmv = float(self.cmv) / float(self.valor_compras[0]) * 100
+        percentual_gasto_fixo = float(self.gasto_fixo) / float(self.valor_compras[0]) * 100
+        percentual_gasto_variavel = float(self.gasto_variavel) / float(self.valor_compras[0]) * 100
 
-        col1, col2, col3 = st.columns([1, 1, 3])
-        col1.metric('Total Vendas', '${}'.format(millify(self.total_vendas)), help='Incluir a data do filtro')
-        col2.metric('Qtd Rodízio', self.rodizio)
-        col3.metric('*Ticket Médio*', '${:.2f}'.format(self.ticket_medio))
-        st.write('-------')
+        col4.metric('CMV', '${}'.format(millify(self.cmv)), '{:.4}%'.format(percentual_cmv))
+        col5.metric('Gasto Fixo', '${}'.format(millify(self.gasto_fixo)), '{:.3}%'.format(percentual_gasto_fixo))
+        col6.metric('Gasto Variável', '${}'.format(millify(self.gasto_variavel)), '{:.4}%'.format(percentual_gasto_variavel))
 
-    def lancamento_vendas(self):
+    def widget_compras(self):
         # Forms pode ser declarado utilizando a sintaxe 'with'
-        with st.form(key='lançar_vendas', clear_on_submit=True):
-            # st.title = ('Lançamento de Vendas')
-            col1, col2, col3, col4, col5, col6= st.columns(6)
+        with st.form(key='lançar_compra', clear_on_submit=True):
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                self.data_venda = st.date_input('Data', format='DD/MM/YYYY')
-                self.periodo = st.selectbox('Período', ['Almoço', 'Jantar'])
-                self.rodizio = st.number_input(label='Qtd Rodízio', value=int('1'), step=5, min_value=1, max_value=500)
+                self.data_compra = st.date_input('Data', format='DD/MM/YYYY')
+                self.fornecedor = st.selectbox('Fornecedor', fornecedor, index=None, placeholder='Escolha Fornecedor')
+                self.data_vencimento = st.date_input('Data Vencimento', value=None, format='DD/MM/YYYY')
+                self.observacao = st.text_input(label='Observação')
             with col2:
-                self.socio = st.number_input('Sócio', value=float(0.00), step=10.00, min_value=0.00, max_value=5000.00)
-                self.dinheiro = st.number_input(label='Dinheiro', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.pix = st.number_input(label='Pix', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
+                self.data_pagamento = st.date_input('Data Pagamento', format='DD/MM/YYYY', value=None)
+                self.valor_compra = st.number_input(label='Valor Compra', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
+                self.valor_pago = st.number_input(label='Valor Pago', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
             with col3:
-                self.debito_visa = st.number_input(label='Débito Visa', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.debito_mastercard = st.number_input(label='Débito Master', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.debito_elo = st.number_input(label='Débito Elo', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
+                self.numero_boleto = st.text_input(label='Número Boleto', placeholder='Digite número do Boleto')
+                self.tipo_pagamento = ['Dinheiro', 'Cartão de Crédito', 'Cartão Débito', 'Pix', 'Cheque', 'Transferência', 'Boleto', 
+                                  'Débito Automático']
+                self.forma_pagamento = st.selectbox('Forma de Pagamento', self.tipo_pagamento, index=None, placeholder='Escolha o Pagamento')
+                self.classificacao = st.selectbox('Classificação', classificacao, index=None, placeholder='Escolha a classificação')
             with col4:
-                self.credito_visa = st.number_input(label='Crédito Visa', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.credito_mastercard = st.number_input(label='Crédito Master', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.credito_elo = st.number_input(label='Crédito Elo', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-            with col5:
-                self.vale_refeicao = st.number_input(label='Vale Refeição', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.sodexo = st.number_input(label='Sodexo', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.alelo = st.number_input(label='Alelo', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-            with col6:
-                self.ticket_rest = st.number_input(label='Ticket Rest', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.american_express = st.number_input(label='American Express', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-                self.dinersclub = st.number_input(label='DinersClub', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
-            submit_button = st.form_submit_button(label='Enviar')         
+                self.grupo_produto = st.selectbox('Grupo Produto', grupo_produto, index=None, placeholder='Escolha o grupo')
+                self.produto = st.selectbox('Produto', produto, index=None, placeholder='Escolha o produto')
+                self.qtd = st.text_input('Qtde', placeholder='Quantidade comprada')
+                
+            submit_button = st.form_submit_button(label='Enviar')
+                
         if submit_button:
-            self.salvar_vendas()
-    
-    def salvar_vendas(self):
-        if self.data_venda == '':
-            st.error('A data da venda não foi preenchida!', icon="🚨")
-        elif self.periodo == '':
-            st.error('O período não foi preenchido!', icon="🚨")
-        elif self.rodizio == '':
-            st.warning('O período não foi preenchido.', icon="⚠")
+            self.salvar_compras()
+
+    def salvar_compras(self):
+        if self.data_compra == '':
+            st.error('Data da compra não é válida!', icon="🚨")
+        elif self.fornecedor in (None, ''):
+            st.error('Fornecedor não foi preenchido!', icon="🚨")
+        elif self.data_vencimento in (None, ''):
+            st.error('Data do vencimento não é válida!', icon="🚨")
+        elif self.valor_compra == '':
+            st.error('Informe valor da compra!', icon="🚨")
+        elif self.classificacao in (None, ''):
+            st.error('Informe classificação da compra!', icon="🚨") #⚠
+        elif self.grupo_produto in (None, ''):
+            st.error('Informe grupo do produto!', icon="🚨")
+        elif self.produto in (None, ''):
+            st.error('Informe produto da compra!', icon="🚨")
         else:            
             self.conecta_mysql()
 
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
             
-            comando = f""" INSERT INTO vendas (data_venda, periodo, qtd_rodizio, dinheiro, pix, debito_mastercard, 
-                        debito_visa, debito_elo, credito_mastercard, credito_visa, credito_elo, american_express, alelo,
-                        hiper, sodexo, ticket_rest, vale_refeicao, dinersclub, socio, dt_atualizado) 
+            comando = f""" INSERT INTO compras (data_compra, data_vencimento, data_pagamento, fornecedor, valor_compra, 
+                                                valor_pago, qtd, numero_boleto, grupo_produto, produto, classificacao, 
+                                                forma_pagamento, observacao, dt_atualizado) 
             VALUES (
-                '{self.data_venda}', '{self.periodo}', '{self.rodizio}', '{self.dinheiro}', '{self.pix}', 
-                '{self.debito_mastercard}', '{self.debito_visa}', '{self.debito_elo}', '{self.credito_mastercard}', 
-                '{self.credito_visa}', '{self.credito_elo}', '{self.american_express}', '{self.alelo}', '{self.hiper}',
-                '{self.sodexo}', '{self.ticket_rest}', '{self.vale_refeicao}', '{self.dinersclub}',
-                '{self.socio}', '{dt_atualizo}')"""
+                '{self.data_compra}', '{self.data_vencimento}', '{self.data_pagamento}', '{self.fornecedor}', '{self.valor_compra}', 
+                '{self.valor_pago}', '{self.qtd}', '{self.numero_boleto}', '{self.grupo_produto}', '{self.produto}', '{self.classificacao}', 
+                '{self.forma_pagamento}', '{self.observacao}', '{dt_atualizo}')"""
 
             self.cursor.execute(comando)
             self.cursor.commit()
-
             self.desconecta_bd()
-            st.success("Lançamento Realizado com Sucesso!")
+
+            msg_lancamento = st.empty()
+            msg_lancamento.success("Lançamento Realizado com Sucesso!")
+            time.sleep(5)
+            msg_lancamento.empty()
             # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
 
-    def lancamento_vendas_table(self):
-        self.conecta_mysql2()
-
-        # Função para carregar dados do banco de dados
-        @st.cache_data
-        def load_data():
-            query = "SELECT * FROM vendas ORDER BY ID DESC"
-            df = pd.read_sql(query, self.conn)
-            return df
-
-        # POR ENQUANTO NÃO ESTOU ATUALIZANDO A DATA DE ATUALIZAÇÃO POIS ESTAVA ALTERANDO A COLUNA INTEIRA
-        # dt_atualizado = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
-
-        # Função para atualizar dados no banco de dados
-        def update_data(df):
-            cursor = self.conn.cursor()
-            for index, row in df.iterrows():
-                query = f"UPDATE vendas SET data_venda = '{row['data_venda']}', periodo = '{row['periodo']}', \
-                            qtd_rodizio = '{row['qtd_rodizio']}', dinheiro = '{row['dinheiro']}', pix = '{row['pix']}', \
-                            debito_mastercard = '{row['debito_mastercard']}', debito_visa = '{row['debito_visa']}', \
-                            debito_elo = '{row['debito_elo']}', credito_mastercard = '{row['credito_mastercard']}', \
-                            credito_visa = '{row['credito_visa']}', credito_elo = '{row['credito_elo']}', alelo = '{row['alelo']}', \
-                            hiper = '{row['hiper']}', american_express = '{row['american_express']}', sodexo = '{row['sodexo']}', \
-                            ticket_rest = '{row['ticket_rest']}', vale_refeicao = '{row['vale_refeicao']}', \
-                            dinersclub = '{row['dinersclub']}', socio = '{row['socio']}' WHERE ID = {row['ID']}"
-                cursor.execute(query)
-            self.conn.commit()
-            
-            cursor.close()
-            self.conn.close()
-
-        # Carregue os dados do banco de dados
-        df = load_data()
+    def df_edicao_compras(self):
+    #     # pegando o nome das colunas
+    #     coluna_vendas = self.valores_compras.columns.tolist()
         
+    #     # alterei nome das colunas para o widget
+    #     coluna_compra = ['ID', 'Data Compra', 'Data Vencimento', 'Data Pagamento', 'Fornecedor', 'Valor Compra',
+    #                     'Valor Pago', 'Qtde', 'Número Boleto', 'Grupo', 'Produto', 'Classificação', 'Forma Pagamento',
+    #                     'Observação', 'Atualizado']
+    #     # witdget
+    #     excluir_coluna = st.multiselect('Excluir coluna', coluna_compra, placeholder='Selecione a coluna')
+        
+    #     # necessário voltar para o nome da coluna original, para tabela a seguir
+    #     nomes_alterados = {
+    #         'ID': 'ID', 'Data Compra': 'data_compra', 'Data Vencimento': 'data_vencimento', 'Data Pagamento': 'data_pagamento', 
+    #         'Fornecedor': 'fornecedor', 'Valor Compra': 'valor_compra', 'Valor Pago': 'valor_pago', 'Qtde': 'qtd',
+    #         'Número Boleto': 'numero_boleto', 'Grupo': 'grupo_produto', 'Produto': 'produto' ,'Classificação': 'classificacao',
+    #         'Forma Pagamento': 'forma_pagamento', 'Observação': 'observacao', 'Atualizado': 'dt_atualizado'
+    #         }
+
+    #     # excluir as colunas selecionadas no widget
+    #     excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
+    #     df = self.valores_compras.drop(excluir_coluna, axis=1)
+
+    #     # Bloquear algumas colunas da edição
+    #     colunas_bloqueadas = {
+    #     'dt_atualizado': {'editable': False},
+    #     'ID': {'editable': False}
+    #     }
+        
+    #     colunas_formatada = {
+    #         'ID': st.column_config.NumberColumn('ID', format='%d'),
+    #         'data_compra': st.column_config.DateColumn('Data Compra', format='DD/MM/YYYY'),
+    #         'data_vencimento': st.column_config.DateColumn('Data Vencimento', format='DD/MM/YYYY'),
+    #         'data_pagamento': st.column_config.DateColumn('Data Pagamento', format='DD/MM/YYYY'),          
+    #         'valor_compra': st.column_config.NumberColumn('Valor Compra', format='$%f', min_value=0, max_value=50000),
+    #         'valor_pago': st.column_config.NumberColumn('Valor Pago', format='$%f', min_value=0, max_value=50000),
+    #         'fornecedor': st.column_config.SelectboxColumn('Fornecedor', options=fornecedor, required=True),
+    #         'qtd': st.column_config.TextColumn('Qtde'),
+    #         'numero_boleto': st.column_config.TextColumn('Número do Boleto'),
+    #         'grupo_produto': st.column_config.SelectboxColumn('Grupo', options=grupo_produto, required=True),
+    #         'produto': st.column_config.SelectboxColumn('Produto', options=produto, required=True),
+    #         'classificacao': st.column_config.SelectboxColumn('Classificação', options=classificacao, required=True),
+    #         'forma_pagamento': st.column_config.TextColumn('Forma de Pagamento'),
+    #         'observacao': st.column_config.TextColumn('Observação'),
+    #         'dt_atualizado': st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A'),
+    #         }
+        
+    #     # Aplicando a formatação apenas nas colunas que ainda existem
+    #     colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
+          
+
+    #     # num_rows = 'dynamic' é um parametro para habilitar a inclusão de linhas
+    #     # disabled = deixa as colunas ineditavel
+    #     tabela_editavel_compras = st.data_editor(df, 
+    #                                              disabled=colunas_bloqueadas, 
+    #                                              column_config=colunas_formatadas_existem, 
+    #                                              column_order=['ID', 'data_compra', 'data_vencimento', 'data_pagamento', 'fornecedor', 
+    #                                                         'valor_compra', 'valor_pago', 'numero_boleto', 'classificacao', 
+    #                                                         'grupo_produto', 'produto', 'forma_pagamento', 'observacao', 'qtd', 'dt_atualizado'],
+    #                                              hide_index=True)
+            pass
+
+    def lancamento_compras_table(self):
+        df = self.valores_compras
+        df['data_compra'] = pd.to_datetime(df['data_compra'], errors='coerce')
+        df['data_vencimento'] = pd.to_datetime(df['data_vencimento'], errors='coerce')
+        df['data_pagamento'] = pd.to_datetime(df['data_pagamento'], errors='coerce')
+        
+        col1, col2, col3, col4 = st.columns([1.5, 1.5, 1, 3])
+        with col1: 
+            filtro_ID_compras = st.multiselect('Selecione ID para edição', df['ID'], placeholder='Escolha um ID')
+            if filtro_ID_compras:
+                df = df[df['ID'].isin(filtro_ID_compras)]
+
+        with col2:
+            filtro_datas = df['data_compra'].dt.strftime('%d/%m/%Y').unique()
+            filtro_data_compras = st.selectbox('Filtrar data', filtro_datas, 
+                                                index=None, 
+                                                placeholder='Escolha uma data') if len(filtro_datas) > 0 else None
+            if filtro_data_compras:
+                df = df[df['data_compra'] == filtro_data_compras]  
+
+        # pegando o nome das colunas
+        coluna_compra = self.valores_compras.columns.tolist()
+
+        # alterei nome das colunas para o widget
+        coluna_compra = ['ID', 'Data Compra', 'Data Vencimento', 'Data Pagamento', 'Fornecedor', 'Valor Compra',
+                        'Valor Pago', 'Qtde', 'Número Boleto', 'Grupo', 'Produto', 'Classificação', 'Forma Pagamento',
+                        'Observação', 'Atualizado']
+        # witdget
+        excluir_coluna = st.multiselect('Excluir coluna', coluna_compra, placeholder='Selecione a coluna', key='excluir_coluna_compras')
+        
+        # necessário voltar para o nome da coluna original, para tabela a seguir
+        nomes_alterados = {
+            'ID': 'ID', 'Data Compra': 'data_compra', 'Data Vencimento': 'data_vencimento', 'Data Pagamento': 'data_pagamento', 
+            'Fornecedor': 'fornecedor', 'Valor Compra': 'valor_compra', 'Valor Pago': 'valor_pago', 'Qtde': 'qtd',
+            'Número Boleto': 'numero_boleto', 'Grupo': 'grupo_produto', 'Produto': 'produto' ,'Classificação': 'classificacao',
+            'Forma Pagamento': 'forma_pagamento', 'Observação': 'observacao', 'Atualizad': 'dt_atualizado'
+            }
+
+        # excluir as colunas selecionadas no widget
+        excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
+
+        df = self.valores_compras.drop(excluir_coluna, axis=1)
+        if len(filtro_ID_compras) > 0: # Se houver IDs filtrados, aplique o filtro
+            df = df[df['ID'].isin(filtro_ID_compras)]
+
+        if filtro_data_compras:
+            df = df[df['data_compra'].isin(filtro_data_compras)]
+                
         # Bloquear algumas colunas da edição
         colunas_bloqueadas = {
         'dt_atualizado': {'editable': False},
         'ID': {'editable': False}
         }
-        
-        # Formatar as colunas como número
+
         colunas_formatada = {
-            'qtd_rodizio': st.column_config.NumberColumn(format='%d', min_value=1, max_value=500),
-            'dinheiro': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'pix': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_mastercard': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_visa': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_elo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_mastercard': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_visa': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_elo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'alelo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'hiper': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'american_express': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'sodexo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'ticket_rest': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'vale_refeicao': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'dinersclub': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'socio': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=2000),
-        }
-        # num_rows = 'dynamic' é para habilitar a inclusão de linhas
+                'ID': st.column_config.NumberColumn('ID', format='%d'),
+                'data_compra': st.column_config.DateColumn('Data Compra', format='DD/MM/YYYY'),
+                'data_vencimento': st.column_config.DateColumn('Data Vencimento', format='DD/MM/YYYY'),
+                'data_pagamento': st.column_config.DateColumn('Data Pagamento', format='DD/MM/YYYY'),
+                'fornecedor': st.column_config.SelectboxColumn('Fornecedor', options=fornecedor, required=True),
+                'valor_compra': st.column_config.NumberColumn('Valor Compra', format='$%f', min_value=0, max_value=25000), 
+                'valor_pago': st.column_config.NumberColumn('Valor Pago', format='$%f', min_value=0, max_value=25000),
+                'qtd': st.column_config.TextColumn('Qtde'),
+                'numero_boleto': st.column_config.TextColumn('Número Boleto'),
+                'grupo_produto': st.column_config.SelectboxColumn('Grupo', options=grupo_produto, required=True),
+                'produto': st.column_config.SelectboxColumn('Produto', options=produto, required=True),
+                'classificacao': st.column_config.SelectboxColumn('Classificação', options=classificacao, required=True),
+                'forma_pagamento': st.column_config.SelectboxColumn('Forma Pagamento', options=self.tipo_pagamento, required=True),
+                'observacao': st.column_config.TextColumn('Observação'),
+                'dt_atualizado':st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A')}
+        
+        # Aplicando a formatação apenas nas colunas que ainda existem
+        colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
+
+        # num_rows = 'dynamic' é um parametro para habilitar a inclusão de linhas
         # disabled = deixa as colunas ineditavel
-        tabela_editavel = st.data_editor(df, hide_index=True, disabled=colunas_bloqueadas, column_config=colunas_formatada,
-                                            column_order=['ID', 'data_venda', 'periodo', 'qtd_rodizio', 'dinheiro', 'pix', 
-                                                            'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
-                                                            'credito_visa', 'credito_elo', 'alelo', 'hiper', 'american_express', 
-                                                            'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio',
-                                                            'dt_atualizado'])
-        # exibindo a tabela
-        tabela_editavel
+        tabela_editavel = st.data_editor(df, 
+                                            disabled=colunas_bloqueadas, 
+                                            column_config=colunas_formatadas_existem, 
+                                            column_order=['ID', 'data_compra', 'data_vencimento', 'data_pagamento', 
+                                                          'fornecedor', 'valor_compra', 'valor_pago', 'qtd', 
+                                                          'numero_boleto', 'grupo_produto', 'produto', 'classificacao',
+                                                          'forma_pagamento', 'observacao', 'dt_atualizado'], 
+                                            hide_index=True)
 
-        if st.button('Salvar Alterações'):
-            update_data(tabela_editavel)
-            st.success('Alterações salvas com sucesso!')   
-        
-    def graficos_vendas(self):
-        # pegando a coluna data
-        self.valores_vendas_np = np.array(self.valores_vendas)
-        
-        self.data_vendas = np.array([ts.strftime('%d/%m/%Y') for ts in self.valores_vendas_np[:, 0]])
-        # somando total de valores para cada dia (coluna total de uma tabela)
-        # somando todas as linhas da coluna 0 até a 14 -> o mesmo que ter uma coluna total de uma tabela
-        # total de vendas desconsiderando consumo dos sócios
-        self.array_total_vendas = np.nansum(self.array_vendas[:, 0:15], axis=1) 
-
-        with st.expander('Gráfico das Vendas - Visão diária e por período'):
-            # ([3,1]) -> essa informação é a proporção de 3 para 1 da coluna 1 para a coluna 2
-            col1, col2 = st.columns([3,1])
-            with col1:    
-                # Converta a matriz em um DataFrame
-                colunas = ['Data', 'Valor']
-                grafico_vendas = np.column_stack((self.data_vendas, self.array_total_vendas))    
-                df = pd.DataFrame(grafico_vendas, columns=colunas)
-
-                # Convertendo a coluna de datas para o tipo datetime
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
-
-                # Ordenando o DataFrame pela coluna de datas
-                df = df.sort_values(by='Data')
-
-                # Gráfico de barras - vendas
-                graf_vendas = alt.Chart(df).mark_bar(cornerRadiusTopLeft=10, cornerRadiusTopRight=10).encode(
-                        x = 'Data:N', 
-                        y = 'Valor:Q',
-                        tooltip = ['Data', 'Valor']
-                        ).properties(title= 'Vendas diária')
-                
-                # rotulos = graf_vendas.mark_text(dy= -6, size=17).encode(text='Valor')
-
-                linha_media = alt.Chart(df).mark_rule(color='red').encode(
-                    y='mean(Valor):Q')
-                
-                st.altair_chart(graf_vendas + linha_media, use_container_width=True)
-
-            with col2:
-                periodo = self.valores_vendas_np[:, 18]
-
-                # Converta a matriz em um DataFrame
-                coluna2 = ['Periodo', 'Valor']
-                df_periodo = np.column_stack((periodo, self.array_total_vendas))
-                grafico_pizza_venda = pd.DataFrame(df_periodo, columns=coluna2)
+        def update_data_compras(df):
+            # atualização acontece apenas nas colunas disponivel
+            self.conecta_mysql2()
+            cursor = self.conn.cursor()
+            data_atual = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
             
-                grafico_pizza_venda = alt.Chart(grafico_pizza_venda).mark_arc(innerRadius=25, outerRadius=60).encode(
-                    theta = alt.Theta(field='Valor', type='quantitative', stack=True),
-                    color = alt.Color(field='Periodo', type='nominal') 
-                ).properties(title= 'Gráfico por período')  #width=700, height=450, 
-                st.altair_chart(grafico_pizza_venda, use_container_width=True)
+            # Obter as colunas disponíveis
+            colunas_disponiveis = df.columns.tolist()
 
-        with st.expander('Gráfico do Ticket Médio'):
-            # incuido coluna ticket medio
-            # array_ticket_medio = np.column_stack((np.nansum(self.array_vendas[:, 0:15], axis=1) / self.array_vendas[:, 15]))
-
-            array_ticket_medio = np.column_stack((self.array_vendas, (self.array_vendas[:, 0] + self.array_vendas[:, 1] + self.array_vendas[:, 2] + 
-                                                    self.array_vendas[:, 3] + self.array_vendas[:, 4] + self.array_vendas[:, 5] + 
-                                                    self.array_vendas[:, 6] + self.array_vendas[:, 7] + self.array_vendas[:, 8] + 
-                                                    self.array_vendas[:, 9] + self.array_vendas[:, 10] + self.array_vendas[:, 11] +
-                                                    self.array_vendas[:, 12] + self.array_vendas[:, 13] + self.array_vendas[:, 14]
-                                                    ) / self.array_vendas[:, 15]))
-            # convertendo a coluna ticket media para duas casas decimais
-            self.ticket_medio = np.round(array_ticket_medio[:, 17:18], 2)
-            
-            colunas = ['Data', 'Valor']
-            array_ticket_medio = np.column_stack((self.data_vendas, self.ticket_medio))
-            df_ticket = pd.DataFrame(array_ticket_medio, columns=colunas)
-
-            # Gráfico de barras - ticket médio  - estava dentro do mrk_line (cornerRadiusTopLeft=10, cornerRadiusTopRight=10)
-            graf_ticket_medio = alt.Chart(df_ticket).mark_line(strokeWidth=2, interpolate='basis').encode(
-                    x = 'Data:N',
-                    y = 'Valor:Q',
-                    tooltip = ['Data', 'Valor']
-                    ).properties(title= 'Ticket Médio')
-            
-            linha = alt.Chart(df_ticket).mark_rule(color='red').encode(
-                    y='mean(Valor):Q')
-            
-            st.altair_chart(graf_ticket_medio + linha, use_container_width=True)
-        
-        with st.expander('Tabela das vendas'):
-            st.write(self.df_vendas)
-
-        with st.expander('Gráfico Mensal'):
-            df_ano_mes = self.df_vendas
-
-            # # df_ano_mes['data_venda'] = pd.to_datetime(df_ano_mes['data_venda'], format='%d/%m/%Y')
-            df_ano_mes['ano'] = df_ano_mes['data_venda'].dt.year
-            df_ano_mes['mes'] = df_ano_mes['data_venda'].dt.month
-            df_ano_mes['mes'] = df_ano_mes['data_venda'].dt.month.apply(lambda x: calendar.month_abbr[x])
-            
-            # Filtro do ano
-            df_filtrado = df_ano_mes.loc[(df_ano_mes['data_venda'].dt.year == 2023)]
-
-            df_ano_mes = df_filtrado.drop(['data_venda', 'socio', 'ID', 'periodo', 'qtd_rodizio', 'dt_atualizado', 'ano', 'mes'], axis=1)
-            df_ano_mes = np.array(df_ano_mes)
-
-            # garantir que array esta como string e assim poder aplicar replace
-            df_ano_mes = df_ano_mes.astype(str)
-            df_ano_mes = np.char.replace(df_ano_mes, ',', '.')
-            # substiturir valores vazios por nan e assim converter valores para float
-            df_ano_mes[df_ano_mes == ''] = 0 #'nan'
-            df_ano_mes = df_ano_mes.astype(float)
-            
-            data = np.array(df_filtrado['mes'])
-            valor = np.nansum(df_ano_mes, axis=1)
-            
-            colunas = ['Meses', 'Valor']
-            array_vendas_mes = np.column_stack((data, valor))
-            df_vendas_mes = pd.DataFrame(array_vendas_mes, columns=colunas)
-
-            # Gráfico de barras - ticket médio
-            graf_vendas_mes = alt.Chart(df_vendas_mes).mark_bar(cornerRadiusTopLeft=10, cornerRadiusTopRight=10).encode(
-                    x = 'Meses:N', 
-                    y = 'sum(Valor):Q',
-                    # tooltip = ['Data', 'Valor']
-                    ).properties(title= 'Vendas Mensais')
-            
-            linha = alt.Chart(df_vendas_mes).mark_rule(color='blue').encode(
-                    y='mean(Valor):Q')
-            
-            rotulos_valores = graf_vendas_mes.mark_text(
-            align='left',
-            baseline='middle',
-            dx=-30,  # Ajuste horizontal para posicionar o rótulo
-            dy=10,  # Ajuste vertical para posicionar o rótulo
-            fontSize = 15,
-            color='black',  # Cor do texto
-             ).encode(
-            text=alt.Text('sum(Valor):Q')  # Use a soma dos valores como texto
-            )
-
-            st.altair_chart(graf_vendas_mes + linha + rotulos_valores, use_container_width=True)
-        
-    def tabela_dinamica_vendas(self):
-        st.write('\
-                 Em desenvolvimento...')
-        # self.conecta_mysql()
-        # def lista():
-        #     lista = f""" SELECT ID, data_venda, periodo, qtd_rodizio, dinheiro, pix, debito_mastercard, debito_visa, debito_elo, 
-        #                         credito_mastercard, credito_visa, credito_elo, hiper, american_express, alelo, sodexo, ticket_rest, 
-        #                         vale_refeicao, dinersclub, socio,
-        #                     CAST(dinheiro AS DECIMAL) + CAST(pix AS DECIMAL) + 
-        #                     CAST(debito_mastercard AS DECIMAL) + CAST(debito_visa AS DECIMAL) + CAST(debito_elo AS DECIMAL) + 
-        #                     CAST(credito_mastercard AS DECIMAL) + CAST(credito_visa AS DECIMAL) + CAST(credito_elo AS DECIMAL) + 
-        #                     CAST(hiper AS DECIMAL) + CAST(american_express AS DECIMAL) + CAST(alelo AS DECIMAL) + 
-        #                     CAST(sodexo AS DECIMAL) + CAST(ticket_rest AS DECIMAL) + CAST(vale_refeicao AS DECIMAL) + 
-        #                     CAST(dinersclub AS DECIMAL) + CAST(socio AS DECIMAL) AS total_vendas 
-        #                 FROM vendas ORDER BY ID DESC; """
-        # lista = lista()
-        # tabelavendas = pd.read_sql(lista, self.conexao)
-        # self.desconecta_bd()
-
-        # # gerando os dataframe
-        # tabelavendas = tabelavendas.drop(['ID'], axis=1)
-
-        # # Conversões
-        # tabelavendas['qtd_rodizio'] = pd.to_numeric(tabelavendas['qtd_rodizio'], errors='coerce')
-        # tabelavendas['dinheiro'] = pd.to_numeric(tabelavendas['dinheiro'], errors='coerce')
-        # tabelavendas['pix'] = pd.to_numeric(tabelavendas['pix'], errors='coerce')
-        # tabelavendas['debito_mastercard'] = pd.to_numeric(tabelavendas['debito_mastercard'], errors='coerce')
-        # tabelavendas['debito_visa'] = pd.to_numeric(tabelavendas['debito_visa'], errors='coerce')
-        # tabelavendas['debito_elo'] = pd.to_numeric(tabelavendas['debito_elo'], errors='coerce')
-        # tabelavendas['credito_mastercard'] = pd.to_numeric(tabelavendas['credito_mastercard'], errors='coerce')
-        # tabelavendas['credito_visa'] = pd.to_numeric(tabelavendas['credito_visa'], errors='coerce')
-        # tabelavendas['credito_elo'] = pd.to_numeric(tabelavendas['credito_elo'], errors='coerce')
-        # tabelavendas['hiper'] = pd.to_numeric(tabelavendas['hiper'], errors='coerce')
-        # tabelavendas['american_express'] = pd.to_numeric(tabelavendas['american_express'], errors='coerce')
-        # tabelavendas['alelo'] = pd.to_numeric(tabelavendas['alelo'], errors='coerce')
-        # tabelavendas['sodexo'] = pd.to_numeric(tabelavendas['sodexo'], errors='coerce')
-        # tabelavendas['ticket_rest'] = pd.to_numeric(tabelavendas['ticket_rest'], errors='coerce')
-        # tabelavendas['vale_refeicao'] = pd.to_numeric(tabelavendas['vale_refeicao'], errors='coerce')
-        # tabelavendas['dinersclub'] = pd.to_numeric(tabelavendas['dinersclub'], errors='coerce')
-        # tabelavendas['socio'] = pd.to_numeric(tabelavendas['socio'], errors='coerce')
-
-        # # check box
-        # shouldDisplayPivoted = st.toggle('Pivotar Coluna')  # st.checkbox("Pivot data on Reference Date") 
-
-        # # torna as colunas redimensionáveis, classificáveis e filtráveis por padrão
-        # gb.configure_default_column(
-        #     resizable=True,
-        #     filterable=True,
-        #     sortable=True,
-        #     editable=False,)
-
-        # # define se o modo de pivô deve ser ativado ou desativado
-        # pivotMode = False # Mode Pivot inicia desativado
-        # gb.configure_grid_options(
-        #     sideBar={
-        #         "toolPanels": [
-        #             {
-        #                 "id": "columns",
-        #                 "labelDefault": "Colunas",
-        #                 "labelKey": "columns",                      # rowGroup ou columns
-        #                 "iconKey": "columns",                       # rowGroup
-        #                 "toolPanel": "agColumnsToolPanel",          # agRowGroupToolPanel ou agColumnsToolPanel
-        #                 "toolPanelParams": {
-        #                     # Permite que as colunas sejam reordenadas no painel de colunas
-        #                     "suppressSyncLayoutWithGrid": True,
-        #                     # impede que as colunas sejam movidas do painel de colunas
-        #                     "suppressColumnMove": False,
-        #                 },
-        #             },
-        #             {
-        #                 "id": "filters",
-        #                 "labelDefault": "Filtros",
-        #                 "labelKey": "filters",
-        #                 "iconKey": "filter",
-        #                 "toolPanel": "agFiltersToolPanel",
-        #                 "toolPanelParams": {
-        #                     # impede que os filtros sejam reordenados no painel de filtros
-        #                     "suppressSyncLayoutWithGrid": True,
-        #                     # impede que os filtros sejam movidos do painel de filtros
-        #                     "suppressFilterMove": True,
-        #                 },
-        #             },
-        #         ],
+            for index, row in df.iterrows():
+                query = "UPDATE compras SET "
+                valores = []
+                for coluna in colunas_disponiveis:
+                    # Verificar se a coluna está presente no índice da linha atual
+                    if coluna in row.index:
+                        valor = row[coluna]
+                        # Se o valor for uma string, adicione aspas simples ao redor dele
+                        if isinstance(valor, str):
+                            valor = f"'{valor}'"
+                        # Se a coluna for uma coluna de data ou hora, formate-a corretamente
+                        if 'data' in coluna or 'dt_atualizado' in coluna:
+                            valor = f"STR_TO_DATE('{valor}', '%Y-%m-%d %H:%i:%s')"
+                        valores.append(f"{coluna} = {valor}")
+                # Adicionar a data_atual à lista de valores
+                valores.append(f"dt_atualizado = STR_TO_DATE('{data_atual}', '%Y/%m/%d, %H:%i:%s')")
+                # Construir a parte SET da query
+                query += ', '.join(valores)
+                # Adicionar a condição WHERE ID = {row['ID']}
+                query += f" WHERE ID = {row['ID']}"
+                try:
+                    cursor.execute(query)
+                except Exception as e:
+                    print(f"Erro ao executar a query: {query}")
+                    print(f"Erro detalhado: {e}")
                         
-        #         # define o painel de colunas como padrão
-        #         "defaultToolPanel": "", # deixar o filtro aberto quando abrir o sistema (columns ou filter dentro do parantes)
-        #         # ativa ou desativa o modo de pivô
-        #         "pivotMode": '',
-        #     },
-        # )
+            self.conn.commit()
+            cursor.close()
+            self.conn.close()
 
-        # # habilite o modo dinâmico quando a caixa de seleção estiver ativada
-        # gb.configure_grid_options(
-        #     tooltipShowDelay=0,
-        #     pivotMode=pivotMode,)
 
-        # # configurar a coluna que exibe a hierarquia do agrupamento
-        # gb.configure_grid_options(
-        #     autoGroupColumnDef=dict(
-        #         minWidth=300, 
-        #         pinned="left",
-        #         cellRendererParams=dict(suppressCount=True)
-        #         )
-        # )
+        with col3:
+            if st.button('Salvar'):
+                if len(filtro_ID_compras) > 0 or filtro_data_compras is not None:
+                    update_data_compras(tabela_editavel)
+                    with col4:
+                        # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
+                        msg_lancamento = st.empty()
+                        msg_lancamento.success("Edição realizada com Sucesso!")
+                        time.sleep(10)
+                        msg_lancamento.empty() 
+                else:
+                    with col4:
+                        msg_lancamento = st.empty()
+                        msg_lancamento.warning('Selecione uma data ou ID que deseja editar!', icon="🚨")
+                        time.sleep(10)
+                        msg_lancamento.empty()
 
-        # # Criando colunas virtuais do ano
-        # gb.configure_column(
-        #     field="virtualYear",
-        #     header_name="Ano",
-        #     valueGetter="new Date(data.data_venda).getFullYear()",
-        #     pivot=True, # allows grid to pivot on this column (o agrupamento altera de linha para coluna de forma automatica)
-        #     enablePivot=True, # ao ativar pivotamento a coluna fica disponivel para selecionar
-        #     hide=True, # oculta-o quando o modo dinâmico está desativado (check box que habilita)
-        #     rowGroup=True if shouldDisplayPivoted else False)
+    def caixas_expansivas(self):
+        # pegando o nome das colunas
+        coluna_compra = self.valores_compras.columns.tolist()
 
-        # # Criando colunas virtuais do mês
-        # gb.configure_column(
-        #     field="virtualMonth",
-        #     header_name="Mês",
-        #     valueGetter="new Date(data.data_venda).toLocaleDateString('pt-BR',options={year:'numeric', month:'2-digit'})",
-        #     pivot=True, # allows grid to pivot on this column (o agrupamento altera de linha para coluna deforma automatica)
-        #     enablePivot=True, # ao ativar pivotamento a coluna fica disponivel para selecionar
-        #     hide=True, # oculta-o quando o modo dinâmico está desativado (check box que habilita)
-        #     rowGroup=True if shouldDisplayPivoted else False)
-
-        # gb.configure_column(
-        #     field="data_venda",
-        #     header_name="Data",
-        #     valueFormatter="value != undefined ? new Date(value).toLocaleString('pt-BR', {dateStyle:'medium'}): ''",
-        #     # flex=1, # padronizar largura da celula
-        #     width=180,
-        #     pivot=False, # allows grid to pivot on this column (o agrupamento altera de linha para coluna deforma automatica)
-        #     enablePivot=True, # ao ativar pivotamento a coluna fica disponivel para selecionar
-        #     hide=True,
-        #     rowGroup=True if shouldDisplayPivoted else False)
-
-        # gb.configure_column(
-        #     field="periodo", 
-        #     header_name="Período",
-        #     width=110,
-        #     pivot=False, # allows grid to pivot on this column (o agrupamento altera de linha para coluna deforma automatica)
-        #     enablePivot=True, # ao ativar pivotamento a coluna fica disponivel para selecionar
-        #     hide=True,
-        #     rowGroup=True if shouldDisplayPivoted else False)
-
-        # gb.configure_column(
-        #     field="dinheiro",
-        #     header_name="Dinheiro",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-
-        # gb.configure_column(
-        #     field="pix",
-        #     header_name="Pix",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        # alterei nome das colunas para o widget
+        coluna_compra = ['ID', 'Data Compra', 'Data Vencimento', 'Data Pagamento', 'Fornecedor', 'Valor Compra',
+                        'Valor Pago', 'Qtde', 'Número Boleto', 'Grupo', 'Produto', 'Classificação', 'Forma Pagamento',
+                        'Observação', 'Atualizado']
+        # witdget
+        excluir_coluna = st.multiselect('Excluir coluna', coluna_compra, placeholder='Selecione a coluna')
         
-        # gb.configure_column(
-        #     field="debito_mastercard",
-        #     header_name="Debito Master",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        # necessário voltar para o nome da coluna original, para tabela a seguir
+        nomes_alterados = {
+            'ID': 'ID', 'Data Compra': 'data_compra', 'Data Vencimento': 'data_vencimento', 'Data Pagamento': 'data_pagamento', 
+            'Fornecedor': 'fornecedor', 'Valor Compra': 'valor_compra', 'Valor Pago': 'valor_pago', 'Qtde': 'qtd',
+            'Número Boleto': 'numero_boleto', 'Grupo': 'grupo_produto', 'Produto': 'produto' ,'Classificação': 'classificacao',
+            'Forma Pagamento': 'forma_pagamento', 'Observação': 'observacao', 'Atualizado': 'dt_atualizado'
+            }
 
-        # gb.configure_column(
-        #     field="debito_visa",
-        #     header_name="Debito Visa",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="debito_elo",
-        #     header_name="Debito Elo",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="credito_mastercard",
-        #     header_name="Credito Master",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="credito_visa",
-        #     header_name="Credito Visa",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="credito_elo",
-        #     header_name="Credito Elo",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="hiper",
-        #     header_name="Hiper Card",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="american_express",
-        #     header_name="American Express",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-        
-        # gb.configure_column(
-        #     field="alelo",
-        #     header_name="Alelo",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     tooltipField="alelo",
-        #     width=110)
+        # excluir as colunas selecionadas no widget
+        excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
 
-        # gb.configure_column(
-        #     field="sodexo",
-        #     header_name="Sodexo",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        colunas_formatada = {
+                'ID': st.column_config.NumberColumn('ID', format='%d'),
+                'data_compra': st.column_config.DateColumn('Data Compra', format='DD/MM/YYYY'),
+                'data_vencimento': st.column_config.DateColumn('Data Vencimento', format='DD/MM/YYYY'),
+                'data_pagamento': st.column_config.DateColumn('Data Pagamento', format='DD/MM/YYYY'),
+                'fornecedor': st.column_config.TextColumn('Fornecedor'),
+                'valor_compra': st.column_config.NumberColumn('Valor Compra', format='$%f'), 
+                'valor_pago': st.column_config.NumberColumn('Valor Pago', format='$%f'),
+                'qtd': st.column_config.TextColumn('Qtde'),
+                'numero_boleto': st.column_config.TextColumn('Número Boleto'),
+                'grupo_produto': st.column_config.TextColumn('Grupo'),
+                'produto': st.column_config.TextColumn('Produto'),
+                'classificacao': st.column_config.TextColumn('Classificação'),
+                'forma_pagamento': st.column_config.TextColumn('Forma Pagamento'),
+                'observacao': st.column_config.TextColumn('Observação'),
+                'dt_atualizado':st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A')}
         
-        # gb.configure_column(
-        #     field="ticket_rest",
-        #     header_name="Ticket Rest",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-
-        # gb.configure_column(
-        #     field="vale_refeicao",
-        #     header_name="Vale Refeição",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-
-        # gb.configure_column(
-        #     field="dinersclub",
-        #     header_name="DinersClub",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
-
-        # gb.configure_column(
-        #     field="qtd_rodizio",
-        #     header_name="Rodízio",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        order_column = ['ID', 'data_compra', 'data_vencimento', 'data_pagamento', 'fornecedor', 'valor_compra',
+                        'valor_pago', 'qtd', 'numero_boleto', 'grupo_produto', 'produto', 'classificacao',
+                        'forma_pagamento', 'observacao', 'dt_atualizado']
         
-        # gb.configure_column(
-        #     field="socio",
-        #     header_name="Socio",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        df_tabela_compras = self.valores_compras.drop(excluir_coluna, axis=1)
+        df_vencimento = self.df_vencimento.drop(excluir_coluna, axis=1)
+        df_pagamentos = self.valores_pagamentos.drop(excluir_coluna, axis=1)
+        df_vencidas = self.df_compra_vencida.drop(excluir_coluna, axis=1)
+
         
-        # gb.configure_column(
-        #     field="total_vendas",
-        #     header_name="Total",
-        #     type=["numericColumn"],
-        #     valueFormatter="value.tolLocaleString()",
-        #     aggFunc="sum",
-        #     width=110,)
+        # Aplicando a formatação apenas nas colunas que ainda existem
+        colunas_formatadas_existem_compras = {key: value for key, value in colunas_formatada.items() if key in df_tabela_compras.columns}
+        colunas_formatadas_existem_vencimento = {key: value for key, value in colunas_formatada.items() if key in df_vencimento.columns}
+        colunas_formatadas_existem_pagamentos = {key: value for key, value in colunas_formatada.items() if key in df_pagamentos.columns}
+        colunas_formatadas_existem_vencidas = {key: value for key, value in colunas_formatada.items() if key in df_vencidas.columns}
 
-        # go = gb.build()
+        with st.expander('Tabela Compras', expanded=True):
+            # excluir_coluna = st.multiselect('Excluir coluna', coluna_compra, placeholder='Selecione a coluna')
+            st.dataframe(df_tabela_compras, column_config= colunas_formatadas_existem_compras,
+                                                hide_index=True, 
+                                                column_order=order_column)
 
-        # AgGrid(tabelavendas, gridOptions=go, height=650)
+        with st.expander('Cards dos pagamentos vencidos'):
+            self.card_conta_vencida()
+            
+        with st.expander('Tabela Vencimentos'): 
+            st.dataframe(df_vencimento, column_config=colunas_formatadas_existem_vencimento, 
+                                             column_order=order_column, 
+                                             hide_index=True)
+
+        with st.expander('Tabela Pagamentos'):
+            st.dataframe(df_pagamentos, column_config=colunas_formatadas_existem_pagamentos,
+                                                    column_order=order_column,
+                                                    hide_index=True)
+
+        with st.expander('Tabela Vencidos'):
+            # self.df_vencimento
+            st.dataframe(df_vencidas, column_config=colunas_formatadas_existem_vencidas, 
+                                                 column_order=order_column, 
+                                                 hide_index=True)

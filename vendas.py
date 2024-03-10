@@ -6,37 +6,56 @@ from millify import millify
 from datetime import datetime
 from streamlit_metrics import metric # precisei intalar no terminal streamlit_metrics e a biblioteca millify
 import calendar
-from st_aggrid import AgGrid, GridOptionsBuilder
-gb = GridOptionsBuilder()
+import time
 from filtro import Filtros
 from conexao import Conexao
+from st_aggrid import AgGrid, GridOptionsBuilder
+gb = GridOptionsBuilder()
 
 
 class Vendas: 
     def __init__(self) -> None:
         self.filtro = Filtros()
-
+        
     def navegacao_vendas(self):
         tab1, tab2, tab3 = st.tabs(["Resumo", "Lançamento", "Tabela Dinâmica"])
         with tab1:
-            self.cards_resumo()
-            self.graficos_vendas()
+            self.cards_resumo_vendas()
+            self.caixas_expansivas_vendas()
         with tab2:
-            st.subheader("Apontamento das vendas")
-            self.lancamento_vendas()
-            st.write('----------------')
-            st.subheader('A data de modificação esta sendo alterado na tabela inteira')
-            self.lancamento_vendas_table()
+            st.write("Lançamento das vendas")
+            self.widget_vendas()
+
+            with st.expander('Edição das vendas', expanded=True):
+                self.lancamento_vendas_table()
         with tab3:
             self.tabela_dinamica_vendas()
 
+    def cards_resumo_vendas(self):
+        self.dataframe_vendas()
+        # Cards das vendas
+        # a função millify serve para abreviar o valor $8.000 para $8k
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric('Credito', '${}'.format(millify(self.credito)), '{:.4}%'.format(self.credito/self.total_vendas*100))
+        col2.metric('Débito', '${}'.format(millify(self.debito)), '{:.4}%'.format(self.debito/self.total_vendas*100))
+        col3.metric('Benefício', '${}'.format(millify(self.outros_cartoes)), '{:.4}%'.format(self.outros_cartoes/self.total_vendas*100), 
+                    help='Cartões: Hiper - American Express - Alelo, Sodexo - Vale Refeição - Ticket Rest - DinersClub')
+        col4.metric('Dinheiro', '${}'.format(millify(self.dinheiro)), '{:.4}%'.format(self.dinheiro/self.total_vendas*100))
+        
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric('Pix', '${}'.format(millify(self.pix)), '{:.4}%'.format(self.pix/self.total_vendas*100))
+        col2.metric('Total Vendas', '${}'.format(millify(self.total_vendas)), help='Incluir a data do filtro')
+        col3.metric('Rodízio', self.rodizio)
+        col4.metric('*Ticket Médio*', '${:.2f}'.format(self.ticket_medio))
+
     def dataframe_vendas(self):
-        # self.conecta_bd()
-        self.df_vendas = Conexao.conecta_bd()
+        consulta = Conexao.conecta_bd()
+        df_vendas = consulta[0]
         # colunas do banco
         # data_venda, dinheiro, pix, debito_mastercard, debito_visa, debito_elo, credito_mastercard, credito_visa, credito_elo, hiper, 
         # american_express, alelo, 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', qtd_rodizio, socio, periodo, dt_atualizado, ID"
-        
+        self.df_vendas = df_vendas
         # Filtrando data
         data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
         data_final = str(self.filtro.data_final)
@@ -53,6 +72,9 @@ class Vendas:
         
         # aplicando os filtros data e periodo
         self.valores_vendas = self.df_vendas[filtro_data & filtro_periodo]
+        
+        # Convertendo a coluna 'coluna_string' para números
+        self.valores_vendas['qtd_rodizio'] = pd.to_numeric(self.valores_vendas['qtd_rodizio'], errors='coerce')
 
         # self.valores_vendas = [item for item in np.array(self.df_vendas) if datetime.strptime(item[0], '%d/%m/%Y').month == 7]
 
@@ -93,32 +115,14 @@ class Vendas:
         self.total_vendas = self.dinheiro + self.pix + self.debito + self.credito + self.outros_cartoes
         self.ticket_medio = self.total_vendas / self.rodizio
 
-    def cards_resumo_vendas(self):
-        self.dataframe_vendas()
-        # Cards das vendas
-        # a função millify serve para abreviar o valor $8.000 para $8k
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric('Credito', '${}'.format(millify(self.credito)), '{:.4}%'.format(self.credito/self.total_vendas*100))
-        col2.metric('Débito', '${}'.format(millify(self.debito)), '{:.4}%'.format(self.debito/self.total_vendas*100))
-        col3.metric('Benefício', '${}'.format(millify(self.outros_cartoes)), '{:.4}%'.format(self.outros_cartoes/self.total_vendas*100), 
-                    help='Cartões: Hiper - American Express - Alelo, Sodexo - Vale Refeição - Ticket Rest - DinersClub')
-        col4.metric('Dinheiro', '${}'.format(millify(self.dinheiro)), '{:.4}%'.format(self.dinheiro/self.total_vendas*100))
-        col5.metric('Pix', '${}'.format(millify(self.pix)), '{:.4}%'.format(self.pix/self.total_vendas*100))
-
-        col1, col2, col3 = st.columns([1, 1, 3])
-        col1.metric('Total Vendas', '${}'.format(millify(self.total_vendas)), help='Incluir a data do filtro')
-        col2.metric('Qtd Rodízio', self.rodizio)
-        col3.metric('*Ticket Médio*', '${:.2f}'.format(self.ticket_medio))
-        st.write('-------')
-
-    def lancamento_vendas(self):
+    def widget_vendas(self):
         # Forms pode ser declarado utilizando a sintaxe 'with'
         with st.form(key='lançar_vendas', clear_on_submit=True):
             # st.title = ('Lançamento de Vendas')
             col1, col2, col3, col4, col5, col6= st.columns(6)
             with col1:
                 self.data_venda = st.date_input('Data', format='DD/MM/YYYY')
-                self.periodo = st.selectbox('Período', ['Almoço', 'Jantar'])
+                self.periodo = st.selectbox('Período', ['Almoço', 'Jantar'], index=None, placeholder='')
                 self.rodizio = st.number_input(label='Qtd Rodízio', value=int('1'), step=5, min_value=1, max_value=500)
             with col2:
                 self.socio = st.number_input('Sócio', value=float(0.00), step=10.00, min_value=0.00, max_value=5000.00)
@@ -140,17 +144,18 @@ class Vendas:
                 self.ticket_rest = st.number_input(label='Ticket Rest', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
                 self.american_express = st.number_input(label='American Express', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
                 self.dinersclub = st.number_input(label='DinersClub', value=float('0.00'), step=10.00, min_value=0.00, max_value=25000.00)
+            
             submit_button = st.form_submit_button(label='Enviar')         
         if submit_button:
             self.salvar_vendas()
-    
+
     def salvar_vendas(self):
         if self.data_venda == '':
             st.error('A data da venda não foi preenchida!', icon="🚨")
-        elif self.periodo == '':
+        elif self.periodo == None:
             st.error('O período não foi preenchido!', icon="🚨")
         elif self.rodizio == '':
-            st.warning('O período não foi preenchido.', icon="⚠")
+            st.error('O período não foi preenchido.', icon="🚨") #⚠
         else:            
             self.conecta_mysql()
 
@@ -170,85 +175,256 @@ class Vendas:
             self.cursor.commit()
 
             self.desconecta_bd()
-            st.success("Lançamento Realizado com Sucesso!")
+            
+            # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
+            msg_lancamento = st.empty()
+            msg_lancamento.success("Lançamento Realizado com Sucesso!")
+            time.sleep(5)
+            msg_lancamento.empty()
             # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
 
-    def lancamento_vendas_table(self):
-        self.conecta_mysql2()
+    def df_edicao_vendas(self):
+        # # pegando o nome das colunas
+        # coluna_vendas = self.valores_vendas.columns.tolist()
 
-        # Função para carregar dados do banco de dados
-        @st.cache_data
-        def load_data():
-            query = "SELECT * FROM vendas ORDER BY ID DESC"
-            df = pd.read_sql(query, self.conn)
-            return df
-
-        # POR ENQUANTO NÃO ESTOU ATUALIZANDO A DATA DE ATUALIZAÇÃO POIS ESTAVA ALTERANDO A COLUNA INTEIRA
-        # dt_atualizado = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
-
-        # Função para atualizar dados no banco de dados
-        def update_data(df):
-            cursor = self.conn.cursor()
-            for index, row in df.iterrows():
-                query = f"UPDATE vendas SET data_venda = '{row['data_venda']}', periodo = '{row['periodo']}', \
-                            qtd_rodizio = '{row['qtd_rodizio']}', dinheiro = '{row['dinheiro']}', pix = '{row['pix']}', \
-                            debito_mastercard = '{row['debito_mastercard']}', debito_visa = '{row['debito_visa']}', \
-                            debito_elo = '{row['debito_elo']}', credito_mastercard = '{row['credito_mastercard']}', \
-                            credito_visa = '{row['credito_visa']}', credito_elo = '{row['credito_elo']}', alelo = '{row['alelo']}', \
-                            hiper = '{row['hiper']}', american_express = '{row['american_express']}', sodexo = '{row['sodexo']}', \
-                            ticket_rest = '{row['ticket_rest']}', vale_refeicao = '{row['vale_refeicao']}', \
-                            dinersclub = '{row['dinersclub']}', socio = '{row['socio']}' WHERE ID = {row['ID']}"
-                cursor.execute(query)
-            self.conn.commit()
-            
-            cursor.close()
-            self.conn.close()
-
-        # Carregue os dados do banco de dados
-        df = load_data()
+        # # alterei nome das colunas para o widget
+        # coluna_vendas = ['Data Venda', 'Dinheiro', 'Pix', 'Debito Master', 'Debito Visa', 'Debito Elo', 'Credito Master', 
+        #                     'Credito Visa', 'Credito Elo', 'Hiper', 'American Express', 'Alelo', 'Sodexo', 'Ticket Rest', 
+        #                     'Vale Refeição', 'DinersClub', 'Rodízio', 'Sócio', 'Período', 'Data Atualização', 'ID']   
+        # # witdget
+        # excluir_coluna = st.multiselect('Excluir coluna', coluna_vendas, placeholder='Selecione a coluna', key='excluir_coluna')
         
+        # # necessário voltar para o nome da coluna original, para tabela a seguir
+        # nomes_alterados = {
+        #     'Data Venda': 'data_venda', 'Dinheiro': 'dinheiro', 'Pix': 'pix', 'Debito Master': 'debito_mastercard', 'Debito Visa': 'debito_visa',
+        #     'Debito Elo': 'debito_elo', 'Credito Master': 'credito_mastercard', 'Credito Visa': 'credito_visa', 'Credito Elo': 'credito_elo', 
+        #     'Hiper': 'hiper', 'American Express': 'american_express', 'Alelo': 'alelo', 'Sodexo': 'sodexo', 'Ticket Rest': 'ticket_rest', 
+        #     'Vale Refeição': 'vale_refeicao', 'DinersClub': 'dinersclub', 'Rodízio': 'qtd_rodizio', 'Sócio': 'socio', 'Período': 'periodo', 
+        #     'Data Atualização': 'dt_atualizado', 'ID': 'ID'
+        #         }
+
+        # # excluir as colunas selecionadas no widget
+        # excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
+        # df = self.valores_vendas.drop(excluir_coluna, axis=1)
+
+        # # Bloquear algumas colunas da edição
+        # colunas_bloqueadas = {
+        # 'dt_atualizado': {'editable': False},
+        # 'ID': {'editable': False}
+        # }
+
+        # colunas_formatada = {
+        #     'ID': st.column_config.NumberColumn('ID', format='%d'),
+        #     'data_venda': st.column_config.DateColumn('Data Venda', format='DD/MM/YYYY'),   
+        #     'periodo': st.column_config.SelectboxColumn('Período', options=['Almoço', 'Jantar'], required=True),
+        #     'qtd_rodizio': st.column_config.NumberColumn('Rodízio', format='%d', min_value=1, max_value=500),
+        #     'dinheiro': st.column_config.NumberColumn('Dinheiro', format='$%f', min_value=0, max_value=25000),
+        #     'pix': st.column_config.NumberColumn('Pix', format='$%f', min_value=0, max_value=25000),
+        #     'debito_mastercard': st.column_config.NumberColumn('Debito Master', format='$%f', min_value=0, max_value=25000),
+        #     'debito_visa': st.column_config.NumberColumn('Debito Visa', format='$%f', min_value=0, max_value=25000),
+        #     'debito_elo': st.column_config.NumberColumn('Debito Elo', format='$%f', min_value=0, max_value=25000),
+        #     'credito_mastercard': st.column_config.NumberColumn('Credito Master', format='$%f', min_value=0, max_value=25000),
+        #     'credito_visa': st.column_config.NumberColumn('Credito Visa', format='$%f', min_value=0, max_value=25000),
+        #     'credito_elo': st.column_config.NumberColumn('Credito Elo', format='$%f', min_value=0, max_value=25000),
+        #     'alelo': st.column_config.NumberColumn('Alelo', format='$%f', min_value=0, max_value=25000),
+        #     'hiper': st.column_config.NumberColumn('Hiper', format='$%f', min_value=0, max_value=25000),
+        #     'american_express': st.column_config.NumberColumn('American Express', format='$%f', min_value=0, max_value=25000),
+        #     'sodexo': st.column_config.NumberColumn('Sodexo', format='$%f', min_value=0, max_value=25000),
+        #     'ticket_rest': st.column_config.NumberColumn('Ticket Rest', format='$%f', min_value=0, max_value=25000),
+        #     'vale_refeicao': st.column_config.NumberColumn('Vale Refeição', format='$%f', min_value=0, max_value=25000),
+        #     'dinersclub': st.column_config.NumberColumn('DinersClub', format='$%f', min_value=0, max_value=25000),
+        #     'socio': st.column_config.NumberColumn('Sócio', format='$%f', min_value=0, max_value=2000),
+        #     'dt_atualizado': st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A'),
+        # }
+
+        # # Aplicando a formatação apenas nas colunas que ainda existem
+        # colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
+        
+        # # num_rows = 'dynamic' é um parametro para habilitar a inclusão de linhas
+        # # disabled = deixa as colunas ineditavel
+        # tabela_editavel = st.data_editor(df, 
+        #                                  disabled=colunas_bloqueadas, 
+        #                                  column_config=colunas_formatadas_existem, 
+        #                                  column_order=['ID', 'data_venda', 'periodo', 'qtd_rodizio', 'dinheiro', 'pix', 
+        #                                                     'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
+        #                                                     'credito_visa', 'credito_elo', 'alelo', 'hiper', 'american_express', 
+        #                                                     'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio',
+        #                                                     'dt_atualizado'], 
+        #                                 hide_index=True)
+        pass
+
+    def lancamento_vendas_table(self):
+        df = self.valores_vendas
+        col1, col2, col3, col4 = st.columns([1.5, 1.5, 1, 3])  
+        with col1:
+            filtro_ID_vendas = st.multiselect('Selecione ID para edição', df['ID'], placeholder='Escolha um ID')
+            if filtro_ID_vendas:
+                df = df[df['ID'].isin(filtro_ID_vendas)]
+        with col2:
+            filtro_datas = df['data_venda'].dt.strftime('%d/%m/%Y').unique()
+            filtro_data_vendas = st.selectbox('Filtrar data', filtro_datas, 
+                                                            index=None, 
+                                                            placeholder='Escolha uma data') if len(filtro_datas) > 0 else None
+            if filtro_data_vendas:
+                df = df[df['data_venda'] == filtro_data_vendas]
+
+        df['data_venda'] = pd.to_datetime(df['data_venda'], errors='coerce')
+
+        # pegando o nome das colunas
+        coluna_vendas = self.valores_vendas.columns.tolist()
+
+        # alterei nome das colunas para o widget
+        coluna_vendas = ['Data Venda', 'Dinheiro', 'Pix', 'Debito Master', 'Debito Visa', 'Debito Elo', 'Credito Master', 
+                            'Credito Visa', 'Credito Elo', 'Hiper', 'American Express', 'Alelo', 'Sodexo', 'Ticket Rest', 
+                            'Vale Refeição', 'DinersClub', 'Rodízio', 'Sócio', 'Período', 'Data Atualização', 'ID']
+        # witdget
+        excluir_coluna = st.multiselect('Excluir coluna', coluna_vendas, placeholder='Selecione a coluna', key='excluir_coluna_vendas_edit')
+        
+        # necessário voltar para o nome da coluna original, para tabela a seguir
+        nomes_alterados = {
+            'Data Venda': 'data_venda', 'Dinheiro': 'dinheiro', 'Pix': 'pix', 'Debito Master': 'debito_mastercard', 'Debito Visa': 'debito_visa',
+            'Debito Elo': 'debito_elo', 'Credito Master': 'credito_mastercard', 'Credito Visa': 'credito_visa', 'Credito Elo': 'credito_elo', 
+            'Hiper': 'hiper', 'American Express': 'american_express', 'Alelo': 'alelo', 'Sodexo': 'sodexo', 'Ticket Rest': 'ticket_rest', 
+            'Vale Refeição': 'vale_refeicao', 'DinersClub': 'dinersclub', 'Rodízio': 'qtd_rodizio', 'Sócio': 'socio', 'Período': 'periodo', 
+            'Data Atualização': 'dt_atualizado', 'ID': 'ID'
+                }
+
+        # excluir as colunas selecionadas no widget
+        excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
+
+        df = self.valores_vendas.drop(excluir_coluna, axis=1)
+        if len(filtro_ID_vendas) > 0:  # Se houver IDs filtrados, aplique o filtro
+            df = df[df['ID'].isin(filtro_ID_vendas)]
+        
+        if filtro_data_vendas:
+            df = df[df['data_venda'] == filtro_data_vendas]
+
         # Bloquear algumas colunas da edição
         colunas_bloqueadas = {
         'dt_atualizado': {'editable': False},
         'ID': {'editable': False}
         }
         
-        # Formatar as colunas como número
         colunas_formatada = {
-            'qtd_rodizio': st.column_config.NumberColumn(format='%d', min_value=1, max_value=500),
-            'dinheiro': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'pix': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_mastercard': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_visa': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'debito_elo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_mastercard': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_visa': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'credito_elo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'alelo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'hiper': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'american_express': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'sodexo': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'ticket_rest': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'vale_refeicao': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'dinersclub': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=25000),
-            'socio': st.column_config.NumberColumn(format='$%d', min_value=0, max_value=2000),
+            'ID': st.column_config.NumberColumn('ID', format='%d'),
+            'data_venda': st.column_config.DateColumn('Data Venda', format='DD/MM/YYYY'),   
+            'periodo': st.column_config.SelectboxColumn('Período', options=['Almoço', 'Jantar'], required=True),
+            'qtd_rodizio': st.column_config.NumberColumn('Rodízio', format='%d', min_value=1, max_value=500),
+            'dinheiro': st.column_config.NumberColumn('Dinheiro', format='$%f', min_value=0, max_value=25000),
+            'pix': st.column_config.NumberColumn('Pix', format='$%f', min_value=0, max_value=25000),
+            'debito_mastercard': st.column_config.NumberColumn('Debito Master', format='$%f', min_value=0, max_value=25000),
+            'debito_visa': st.column_config.NumberColumn('Debito Visa', format='$%f', min_value=0, max_value=25000),
+            'debito_elo': st.column_config.NumberColumn('Debito Elo', format='$%f', min_value=0, max_value=25000),
+            'credito_mastercard': st.column_config.NumberColumn('Credito Master', format='$%f', min_value=0, max_value=25000),
+            'credito_visa': st.column_config.NumberColumn('Credito Visa', format='$%f', min_value=0, max_value=25000),
+            'credito_elo': st.column_config.NumberColumn('Credito Elo', format='$%f', min_value=0, max_value=25000),
+            'alelo': st.column_config.NumberColumn('Alelo', format='$%f', min_value=0, max_value=25000),
+            'hiper': st.column_config.NumberColumn('Hiper', format='$%f', min_value=0, max_value=25000),
+            'american_express': st.column_config.NumberColumn('American Express', format='$%f', min_value=0, max_value=25000),
+            'sodexo': st.column_config.NumberColumn('Sodexo', format='$%f', min_value=0, max_value=25000),
+            'ticket_rest': st.column_config.NumberColumn('Ticket Rest', format='$%f', min_value=0, max_value=25000),
+            'vale_refeicao': st.column_config.NumberColumn('Vale Refeição', format='$%f', min_value=0, max_value=25000),
+            'dinersclub': st.column_config.NumberColumn('DinersClub', format='$%f', min_value=0, max_value=25000),
+            'socio': st.column_config.NumberColumn('Sócio', format='$%f', min_value=0, max_value=2000),
+            'dt_atualizado': st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A'),
         }
-        # num_rows = 'dynamic' é para habilitar a inclusão de linhas
+        # Aplicando a formatação apenas nas colunas que ainda existem
+        colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
+
+        # num_rows = 'dynamic' é um parametro para habilitar a inclusão de linhas
         # disabled = deixa as colunas ineditavel
-        tabela_editavel = st.data_editor(df, hide_index=True, disabled=colunas_bloqueadas, column_config=colunas_formatada,
+        tabela_editavel = st.data_editor(df, 
+                                            disabled=colunas_bloqueadas, 
+                                            column_config=colunas_formatadas_existem, 
                                             column_order=['ID', 'data_venda', 'periodo', 'qtd_rodizio', 'dinheiro', 'pix', 
                                                             'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
                                                             'credito_visa', 'credito_elo', 'alelo', 'hiper', 'american_express', 
                                                             'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio',
-                                                            'dt_atualizado'])
-        # exibindo a tabela
-        tabela_editavel
-
-        if st.button('Salvar Alterações'):
-            update_data(tabela_editavel)
-            st.success('Alterações salvas com sucesso!')   
+                                                            'dt_atualizado'], 
+                                            hide_index=True)
         
-    def graficos_vendas(self):
+        # Função para atualizar dados no banco de dados
+        def update_data(df):
+            def atualizacao_anterior():
+            # ESTAVA UTILIZANDO ESSE CÓDIGO ANTES DE FAZER OS FILTROS DAS COLUNAS DA tabela_editavel
+            # self.conecta_mysql2()
+            # cursor = self.conn.cursor()
+            # data_atual = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+            # for index, row in df.iterrows():
+            #     query = f"UPDATE vendas \
+            #                 SET data_venda = '{row['data_venda']}', periodo = '{row['periodo']}', \
+            #                 qtd_rodizio = '{row['qtd_rodizio']}', dinheiro = '{row['dinheiro']}', pix = '{row['pix']}', \
+            #                 debito_mastercard = '{row['debito_mastercard']}', debito_visa = '{row['debito_visa']}', \
+            #                 debito_elo = '{row['debito_elo']}', credito_mastercard = '{row['credito_mastercard']}', \
+            #                 credito_visa = '{row['credito_visa']}', credito_elo = '{row['credito_elo']}', alelo = '{row['alelo']}', \
+            #                 hiper = '{row['hiper']}', american_express = '{row['american_express']}', sodexo = '{row['sodexo']}', \
+            #                 ticket_rest = '{row['ticket_rest']}', vale_refeicao = '{row['vale_refeicao']}', \
+            #                 dinersclub = '{row['dinersclub']}', socio = '{row['socio']}', dt_atualizado = '{data_atual}' \
+            #                 WHERE ID = {row['ID']}"
+            #     cursor.execute(query)
+                
+            # self.conn.commit()
+            # cursor.close()
+            # self.conn.close()
+                pass
+
+            # atualização acontece apenas nas colunas disponivel
+            self.conecta_mysql2()
+            cursor = self.conn.cursor()
+            data_atual = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+            
+            # Obter as colunas disponíveis
+            colunas_disponiveis = df.columns.tolist()
+
+            for index, row in df.iterrows():
+                query = "UPDATE vendas SET "
+                valores = []
+                for coluna in colunas_disponiveis:
+                    # Verificar se a coluna está presente no índice da linha atual
+                    if coluna in row.index:
+                        valor = row[coluna]
+                        # Se o valor for uma string, adicione aspas simples ao redor dele
+                        if isinstance(valor, str):
+                            valor = f"'{valor}'"
+                        # Se a coluna for uma coluna de data ou hora, formate-a corretamente
+                        if 'data' in coluna or 'dt_atualizado' in coluna:
+                            valor = f"STR_TO_DATE('{valor}', '%Y-%m-%d %H:%i:%s')"
+                        valores.append(f"{coluna} = {valor}")
+                # Adicionar a data_atual à lista de valores
+                valores.append(f"dt_atualizado = STR_TO_DATE('{data_atual}', '%Y/%m/%d, %H:%i:%s')")
+                # Construir a parte SET da query
+                query += ', '.join(valores)
+                # Adicionar a condição WHERE ID = {row['ID']}
+                query += f" WHERE ID = {row['ID']}"
+                try:
+                    cursor.execute(query)
+                except Exception as e:
+                    print(f"Erro ao executar a query: {query}")
+                    print(f"Erro detalhado: {e}")
+                        
+            self.conn.commit()
+            cursor.close()
+            self.conn.close()
+
+
+        with col3:
+            if st.button('Salvar Alterações'):
+                if len(filtro_ID_vendas) > 0 or filtro_data_vendas is not None:
+                    update_data(tabela_editavel)
+                    with col4:
+                        # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
+                        msg_lancamento = st.empty()
+                        msg_lancamento.success("Edição realizada com Sucesso!")
+                        time.sleep(10)
+                        msg_lancamento.empty()
+                else:
+                    with col4:
+                        msg_lancamento = st.empty()
+                        msg_lancamento.error('Selecione uma data ou ID que deseja editar!', icon="🚨")
+                        time.sleep(10)
+                        msg_lancamento.empty()
+
+    def caixas_expansivas_vendas(self):
         # pegando a coluna data
         self.valores_vendas_np = np.array(self.valores_vendas)
         self.data_vendas = np.array([ts.strftime('%d/%m/%Y') for ts in self.valores_vendas_np[:, 0]])
@@ -257,6 +433,66 @@ class Vendas:
         # total de vendas desconsiderando consumo dos sócios
         self.array_total_vendas = np.nansum(self.array_vendas[:, 0:15], axis=1) 
 
+        with st.expander('Tabela das vendas'):
+            # pegando o nome das colunas
+            coluna_vendas = self.valores_vendas.columns.tolist()
+
+            # alterei nome das colunas para o widget
+            # não inclui a coluna Rodízio pois não posso excluir essa coluna devido o subset na configuração da tabela_vendas que me mostra a max do rodizio
+            coluna_vendas = ['Data Venda', 'Dinheiro', 'Pix', 'Debito Master', 'Debito Visa', 'Debito Elo', 'Credito Master', 
+                             'Credito Visa', 'Credito Elo', 'Hiper', 'American Express', 'Alelo', 'Sodexo', 'Ticket Rest', 
+                             'Vale Refeição', 'DinersClub', 'Sócio', 'Período', 'Data Atualização', 'ID']
+            # witdget
+            excluir_coluna = st.multiselect('Excluir coluna', coluna_vendas, placeholder='Selecione a coluna')
+            
+            # necessário voltar para o nome da coluna original, para tabela a seguir
+            nomes_alterados = {
+                'Data Venda': 'data_venda', 'Dinheiro': 'dinheiro', 'Pix': 'pix', 'Debito Master': 'debito_mastercard', 'Debito Visa': 'debito_visa',
+                'Debito Elo': 'debito_elo', 'Credito Master': 'credito_mastercard', 'Credito Visa': 'credito_visa', 'Credito Elo': 'credito_elo', 
+                'Hiper': 'hiper', 'American Express': 'american_express', 'Alelo': 'alelo', 'Sodexo': 'sodexo', 'Ticket Rest': 'ticket_rest', 
+                'Vale Refeição': 'vale_refeicao', 'DinersClub': 'dinersclub', 'Rodízio': 'qtd_rodizio', 'Sócio': 'socio', 'Período': 'periodo', 
+                'Data Atualização': 'dt_atualizado', 'ID': 'ID'
+                    }
+
+            # excluir as colunas selecionadas no widget
+            excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
+
+            df = self.valores_vendas.drop(excluir_coluna, axis=1)
+
+            colunas_formatada = {
+            'ID': st.column_config.NumberColumn('ID', format='%d', min_value=1, max_value=500),
+            'data_venda': st.column_config.DateColumn('Data Venda', format='DD/MM/YYYY'),
+            'periodo': st.column_config.SelectboxColumn('Período', options=['Almoço', 'Jantar'], required=True),
+            'qtd_rodizio': st.column_config.NumberColumn('Rodízio', format='%d', min_value=1, max_value=500),
+            'dinheiro': st.column_config.NumberColumn('Dinheiro', format='$%f', min_value=0, max_value=25000),
+            'pix': st.column_config.NumberColumn('Pix', format='$%f', min_value=0, max_value=25000),
+            'debito_mastercard': st.column_config.NumberColumn('Debito Master', format='$%f', min_value=0, max_value=25000),
+            'debito_visa': st.column_config.NumberColumn('Debito Visa', format='$%f', min_value=0, max_value=25000),
+            'debito_elo': st.column_config.NumberColumn('Debito Elo', format='$%f', min_value=0, max_value=25000),
+            'credito_mastercard': st.column_config.NumberColumn('Credito Master', format='$%f', min_value=0, max_value=25000),
+            'credito_visa': st.column_config.NumberColumn('Credito Visa', format='$%f', min_value=0, max_value=25000),
+            'credito_elo': st.column_config.NumberColumn('Credito Elo', format='$%f', min_value=0, max_value=25000),
+            'alelo': st.column_config.NumberColumn('Alelo', format='$%f', min_value=0, max_value=25000),
+            'hiper': st.column_config.NumberColumn('Hiper', format='$%f', min_value=0, max_value=25000),
+            'american_express': st.column_config.NumberColumn('American Express', format='$%f', min_value=0, max_value=25000),
+            'sodexo': st.column_config.NumberColumn('Sodexo', format='$%f', min_value=0, max_value=25000),
+            'ticket_rest': st.column_config.NumberColumn('Ticket Rest', format='$%f', min_value=0, max_value=25000),
+            'vale_refeicao': st.column_config.NumberColumn('Vale Refeição', format='$%f', min_value=0, max_value=25000),
+            'dinersclub': st.column_config.NumberColumn('DinersClub', format='$%f', min_value=0, max_value=25000),
+            'socio': st.column_config.NumberColumn('Sócio', format='$%f', min_value=0, max_value=2000),
+            'dt_atualizado': st.column_config.DatetimeColumn('Atualizando', format='DD/MM/YYYY- h:mm A'),
+            }
+
+            # Aplicando a formatação apenas nas colunas que ainda existem
+            colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
+
+            tabela_vendas = st.dataframe(df.style.highlight_max(axis=0, subset=['qtd_rodizio']), hide_index=True, column_config=colunas_formatadas_existem,
+                                         column_order=['ID', 'data_venda', 'periodo', 'qtd_rodizio', 'dinheiro', 'pix', 
+                                                            'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
+                                                            'credito_visa', 'credito_elo', 'alelo', 'hiper', 'american_express', 
+                                                            'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio',
+                                                            'dt_atualizado'])
+            
         with st.expander('Gráfico das Vendas - Visão diária e por período'):
             # ([3,1]) -> essa informação é a proporção de 3 para 1 da coluna 1 para a coluna 2
             col1, col2 = st.columns([3,1])
@@ -330,13 +566,10 @@ class Vendas:
                     y='mean(Valor):Q')
             
             st.altair_chart(graf_ticket_medio + linha, use_container_width=True)
-        
-        with st.expander('Tabela das vendas'):
-            st.write(self.valores_vendas)
 
         with st.expander('Gráfico Mensal'):
-            df_ano_mes = self.df_vendas # esse df_vendas não tem filtro na data pega todos os meses
-            # df_ano_mes = self.valores_vendas
+            # df_ano_mes = self.df_vendas # esse df_vendas não tem filtro na data pega todos os meses
+            df_ano_mes = self.valores_vendas
 
             # # df_ano_mes['data_venda'] = pd.to_datetime(df_ano_mes['data_venda'], format='%d/%m/%Y')
             df_ano_mes['ano'] = df_ano_mes['data_venda'].dt.year
