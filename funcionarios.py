@@ -85,7 +85,6 @@ class FuncCadastro:
         with st.form(key='func_cadastro', clear_on_submit=True):
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.subheader('Criar uma forma de não cadastrar o mesmo funcionario duas vezes')
                 self.nome_funcionario = st.text_input(label='Nome', placeholder='Nome do funcionário')
                 self.rg = st.text_input(label='RG', placeholder='RG do funcionário')
                 self.cpf = st.text_input(label='CPF', placeholder='CPF do funcionário')
@@ -112,15 +111,16 @@ class FuncCadastro:
             st.error('Nome de funcionário não é válido!', icon="🚨")
         else:
             self.conecta_mysql()
-
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
-            
+
+            # Antes de realizar o INSERT INTO eu verifico se já existe o mesmo funcionário cadastrado pois não posso ter nome duplicado devido a chave primária
             comando = f""" INSERT INTO cadastro_funcionario (nome, rg, cpf, carteira_trabalho, endereco, numero, bairro, cidade,
                                                 telefone, banco, agencia, conta, dt_atualizado) 
-            VALUES (
+            SELECT
                 '{self.nome_funcionario}', '{self.rg}', '{self.cpf}', '{self.carteira_trabalho}', '{self.endereco}', 
                 '{self.numero}', '{self.bairro}', '{self.cidade}', '{self.telefone}', '{self.banco}', '{self.agencia}', 
-                '{self.conta}', '{dt_atualizo}')"""
+                '{self.conta}', '{dt_atualizo}'
+            WHERE NOT EXISTS (SELECT 1 FROM cadastro_funcionario WHERE nome = '{self.nome_funcionario}')"""
 
             self.cursor.execute(comando)
             self.cursor.commit()
