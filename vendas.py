@@ -367,7 +367,9 @@ class Vendas:
             # cursor.close()
             # self.conn.close()
                 pass
-
+            
+            df = df.drop(['ano', 'mes'], axis=1)
+            
             # atualização acontece apenas nas colunas disponivel
             self.conecta_mysql2()
             cursor = self.conn.cursor()
