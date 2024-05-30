@@ -1,4 +1,6 @@
 import streamlit as st
+from pygwalker.api.streamlit import StreamlitRenderer
+from sqlalchemy import text, select, insert, update, Table, MetaData, Column, Integer, String, DateTime
 from datetime import datetime
 from filtro import Filtros
 from conexao import Conexao
@@ -6,81 +8,45 @@ import pandas as pd
 import time
 
 
-consulta = Conexao.conecta_bd()
-df_cadastro = consulta[8]
-nome_funcionario = consulta[9]
-df_pg_funcionario = consulta[10]
-
-lista_banco = ['Bradesco', 'Itau', 'Santander', 'Nubank', 'Banco do Brasil', 'Caixa Econômica', 'Inter', 'C6 Bank',
-                         'Neon', 'Next', 'Banco Original']
-
-lista_tipo_pagamento = ['Salário', 'Adiantamento', 'Vale', 'Vale Transporte', 'Extra', 'Rescisão', 'Comissão', 
-                                        'Férias', '13° Salário']
-
-lista_forma_pagamento = ['Conta Salário', 'Dinheiro', 'Transferência', 'Pix', 'Cheque', 'Multa Recisória']
-
-lista_forma_desligamento = ['Dispensa sem justa causa', 'Demissão por justa causa', 'Pedido de demissão',
-                                             'Término do contrato', 'Rescisão indireta', 'Rescisão por culpa recíproca']
-
-df_funcionario_ativo = df_cadastro[df_cadastro['data_contratacao'].notna() & # valores não nulos
-                                    df_cadastro['data_contratacao'].notnull() & # valores que não estão vazios
-                                    df_cadastro['data_desligamento'].isna() & # valores nulos
-                                    df_cadastro['data_desligamento'].isnull()] # valores vazios
-
-
-class FiltrosFuncionarios:
-    def filtros_funcionarios(self):
-        if self.filtro.varNomeFunc:
-            self.filtro_nome_func = df_cadastro['nome'].isin(self.filtro.varNomeFunc)
-        else:
-            self.filtro_nome_func = pd.Series([True] * len(df_cadastro)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
-        
-        if self.filtro.varCargo:
-            self.filtro_cargo = df_cadastro['cargo'].isin(self.filtro.varCargo)
-        else:
-            self.filtro_cargo = pd.Series([True] * len(df_cadastro))
-
-        if self.filtro.varSetor:
-            self.filtro_setor = df_cadastro['setor'].isin(self.filtro.varSetor)
-        else:
-            self.filtro_setor = pd.Series([True] * len(df_cadastro))
-
-        df_cadastro['data_contratacao'] = pd.to_datetime(df_cadastro['data_contratacao'], errors='coerce')
-        if self.filtro.varDataContratacao:
-            self.filtro_data_contratacao = df_cadastro['data_contratacao'].isin(self.filtro.varDataContratacao)
-        else:
-            self.filtro_data_contratacao = pd.Series([True] * len(df_cadastro))
-
 class FuncNavegacao:
     def navegacao_funcionarios(self):
         tab1, tab2, tab3, tab4 = st.tabs(['Cadastro', 'Contratação', 'Pagamento', 'Rescisão'])
     
         with tab1:
-            st.write('Cadastro de funcionário')
-            self.widget_cadastro()
+            with st.expander('Cadastro de funcionário', expanded=True):
+                self.widget_cadastro()
             with st.expander('Edição do cadastro'):
                 self.edicao_cadastro_table()     
         with tab2:
-            st.write('Admissão de funcionário')
-            self.widget_admissao()
-            with st.expander('Edição da admissão', expanded=True):
+            with st.expander('Admissão de funcionário', expanded=True):
+                self.widget_admissao()
+            with st.expander('Edição da admissão'):
                 self.edicao_admissao_table()
         with tab3:
-            st.write('Pagamento de funcionário')
-            self.widget_pagamento()
-            with st.expander('Edição de pagamento dos funcionários', expanded=True):
+            with st.expander('Pagamento de funcionário', expanded=True):
+                self.widget_pagamento()
+            with st.expander('Edição de pagamento dos funcionários'):
                 self.edicao_pg_func_table()
         with tab4:
-            st.write('Rescisão de funcionário')
-            self.widget_rescisao()
-            with st.expander('Edição da rescisão dos funcionários', expanded=True):
+            with st.expander('Rescisão de funcionário', expanded=True):
+                self.widget_rescisao()
+            with st.expander('Edição da rescisão dos funcionários'):
                 self.edicao_rescisao_table()
 
 class FuncCadastro: 
     def __init__(self) -> None:
         self.filtro = Filtros()
-        
+
+    @staticmethod
+    def atualizar_func_cadastro():
+        consulta = Conexao.conecta_bd()
+        # print('Conectado ao banco, atualizar_cadastro')
+        df_cadastro = consulta[8]
+        return df_cadastro
+
     def widget_cadastro(self):
+        self.lista_banco = ['Bradesco', 'Itau', 'Santander', 'Nubank', 'Banco do Brasil',
+                               'Caixa Econômica', 'Inter', 'C6 Bank', 'Neon', 'Next', 'Banco Original']
         # Forms pode ser declarado utilizando a sintaxe 'with'
         with st.form(key='func_cadastro', clear_on_submit=True):
             col1, col2, col3, col4 = st.columns(4)
@@ -97,7 +63,7 @@ class FuncCadastro:
                 self.numero = st.text_input(label='Número', placeholder='Número do endereço')
                 self.telefone = st.text_input(label='Contato', placeholder='Telefone')
             with col4:
-                self.banco = st.selectbox('Banco', lista_banco, index=None, placeholder='Selecione o banco')
+                self.banco = st.selectbox('Banco', self.lista_banco, index=None, placeholder='Selecione o banco')
                 self.agencia = st.text_input(label='Agencia', placeholder='Agencia do Banco')
                 self.conta = st.text_input(label='Conta', placeholder='Número da conta')
 
@@ -110,30 +76,77 @@ class FuncCadastro:
         if self.nome_funcionario == '':
             st.error('Nome de funcionário não é válido!', icon="🚨")
         else:
-            self.conecta_mysql()
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+            self.conecta_mysql()
 
-            # Antes de realizar o INSERT INTO eu verifico se já existe o mesmo funcionário cadastrado pois não posso ter nome duplicado devido a chave primária
-            comando = f""" INSERT INTO cadastro_funcionario (nome, rg, cpf, carteira_trabalho, endereco, numero, bairro, cidade,
-                                                telefone, banco, agencia, conta, dt_atualizado) 
-            SELECT
-                '{self.nome_funcionario}', '{self.rg}', '{self.cpf}', '{self.carteira_trabalho}', '{self.endereco}', 
-                '{self.numero}', '{self.bairro}', '{self.cidade}', '{self.telefone}', '{self.banco}', '{self.agencia}', 
-                '{self.conta}', '{dt_atualizo}'
-            WHERE NOT EXISTS (SELECT 1 FROM cadastro_funcionario WHERE nome = '{self.nome_funcionario}')"""
+            metadata = MetaData()
+            cadastro_func_table = Table('cadastro_funcionario', metadata,
+                Column('ID', Integer, primary_key=True),
+                Column('nome', String),
+                Column('rg', String),
+                Column('cpf', String),
+                Column('carteira_trabalho', String),
+                Column('endereco', String),
+                Column('numero', String),
+                Column('bairro', String),
+                Column('cidade', String),
+                Column('telefone', String),
+                Column('banco', String),
+                Column('agencia',  String),
+                Column('conta', String),
+                Column('dt_atualizado', DateTime)
+            )
 
-            self.cursor.execute(comando)
-            self.cursor.commit()
+            # Definindo os valores para inserção
+            valores = {
+                'nome': self.nome_funcionario,
+                'rg': self.rg,
+                'cpf': self.cpf,
+                'carteira_trabalho': self.carteira_trabalho,
+                'endereco': self.endereco,
+                'numero': self.numero,
+                'bairro': self.bairro,
+                'cidade': self.cidade,
+                'telefone': self.telefone,
+                'banco': self.banco,
+                'agencia': self.agencia,
+                'conta': self.conta,
+                'dt_atualizado': dt_atualizo
+            }
+           
+            # Verificar se o nome do funcionário já existe na tabela
+            stmt_select = select(cadastro_func_table).where(cadastro_func_table.c.nome == self.nome_funcionario)
+            resultado = self.session.execute(stmt_select)
+            existe_nome = resultado.fetchone() is not None
 
-            self.desconecta_bd()
-            # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
-            msg_lancamento = st.empty()
-            msg_lancamento.success("Lançamento Realizado com Sucesso!", icon='✅')
-            time.sleep(10)
-            msg_lancamento.empty()
-            # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
+            # Se o nome não existir, então inserir o novo registro
+            if not existe_nome:
+                stmt = insert(cadastro_func_table).values(valores)
+                # Executando a instrução de INSERT
+                self.session.execute(stmt)
+                # Confirmar a transação
+                self.session.commit()
+
+                # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
+                msg_lancamento = st.empty()
+                msg_lancamento.success("Lançamento Realizado com Sucesso!", icon='✅')
+                time.sleep(10)
+                msg_lancamento.empty()
+                # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
+            else:
+                msg_lancamento = st.empty()
+                msg_lancamento.error("Nome já cadastrado", icon="🚨")
+                time.sleep(5)
+                msg_lancamento.empty()
+                # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
+
+            # Fechar a sessão
+            self.session.close()
+            print('Fechou conexão')
 
     def dataframe_cadastro(self):
+        consulta = FuncCadastro.atualizar_func_cadastro()
+        df_cadastro = consulta
         # chamando a classe FiltrosFuncionarios e o metodo filtros_funcionarios
         FiltrosFuncionarios.filtros_funcionarios(self)
 
@@ -185,7 +198,7 @@ class FuncCadastro:
             'endereco': st.column_config.TextColumn('Endereço'),
             'numero': st.column_config.TextColumn('Número'),
             'telefone': st.column_config.TextColumn('Telefone'),
-            'banco': st.column_config.SelectboxColumn('Banco', options=lista_banco, required=True),
+            'banco': st.column_config.SelectboxColumn('Banco', options=self.lista_banco, required=True),
             'agencia': st.column_config.TextColumn('Agencia'),
             'conta': st.column_config.TextColumn('Conta'),
             'dt_atualizado': st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A'),
@@ -235,13 +248,42 @@ class FuncCadastro:
                         time.sleep(10)
                         msg_lancamento.empty()
 
+class FiltrosFuncionarios:
+    def filtros_funcionarios(self):
+        consulta = FuncCadastro.atualizar_func_cadastro()
+        self.df_cadastro = consulta
+
+        if self.filtro.varNomeFunc:
+            self.filtro_nome_func = self.df_cadastro['nome'].isin(self.filtro.varNomeFunc)
+        else:
+            self.filtro_nome_func = pd.Series([True] * len(self.df_cadastro)) # se a lista estiver vazia, considera todos os valores como verdadeiros  
+        
+        if self.filtro.varCargo:
+            self.filtro_cargo = self.df_cadastro['cargo'].isin(self.filtro.varCargo)
+        else:
+            self.filtro_cargo = pd.Series([True] * len(self.df_cadastro))
+
+        if self.filtro.varSetor:
+            self.filtro_setor = self.df_cadastro['setor'].isin(self.filtro.varSetor)
+        else:
+            self.filtro_setor = pd.Series([True] * len(self.df_cadastro))
+
+        self.df_cadastro['data_contratacao'] = pd.to_datetime(self.df_cadastro['data_contratacao'], errors='coerce')
+        if self.filtro.varDataContratacao:
+            self.filtro_data_contratacao = self.df_cadastro['data_contratacao'].isin(self.filtro.varDataContratacao)
+        else:
+            self.filtro_data_contratacao = pd.Series([True] * len(self.df_cadastro))
+
 class FuncAdmissao: # Contratação
     def widget_admissao(self):
+        consulta = FuncCadastro.atualizar_func_cadastro()
+        self.df_cadastro = consulta
+        
         with st.form(key='func_admissao', clear_on_submit=True):
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está vazio ou nulo. Para que tenhamos apenas opções de funcionarios não contratados
-                funcionario_nao_admitido = df_cadastro[df_cadastro['data_contratacao'].isna() | df_cadastro['data_contratacao'].isnull()]
+                funcionario_nao_admitido = self.df_cadastro[self.df_cadastro['data_contratacao'].isna() | self.df_cadastro['data_contratacao'].isnull()]
                 self.nome_funcionario = st.selectbox('Nome', funcionario_nao_admitido['nome'].unique(), index=None, placeholder='Funcionário')
                 self.salario = st.number_input(label='Salário', value=float('0.00'), step=100.00, min_value=0.00, max_value=25000.00)
             with col2:
@@ -256,7 +298,7 @@ class FuncAdmissao: # Contratação
                 cargos_values = [value for sublist in cargos_lists for value in sublist]
                 self.cargo = st.selectbox('Cargo', cargos_values, index=None, placeholder='Selecione o Cargo', help='Selecione Cargo')
                 self.doc_recebidos = st.selectbox('Doc Recebidos', ['Pendente', 'Concluído'], index=None, 
-                                                    placeholder='Selecione satatus', help='Todos documentos recebidos')
+                                                    placeholder='Selecione satatus', help='Todos documentos recebidos')                    
             with col3:
                 # Seleção do setor
                 self.setor = st.selectbox('Setor', cargos_por_setor.keys(), index=None, placeholder='Selecione o Setor')
@@ -265,11 +307,9 @@ class FuncAdmissao: # Contratação
                 self.exame_admissional = st.date_input('Exame Admissional', format='DD/MM/YYYY', value=None)
                 self.doc_contabilidade = st.selectbox('Doc Contabilidade', ['Pendente', 'Concluído'], index=None,
                                                     placeholder='Selecione satatus', help='Documentos enviados para contabilidade')
-
             with col5:
                 self.data_contratacao = st.date_input('Data Contratação', format='DD/MM/YYYY', value=None)
                 self.observacao_func_admissao = st.text_input(label='Obeservação')
-
             submit_button = st.form_submit_button(label='Enviar')
 
         if submit_button:
@@ -297,25 +337,45 @@ class FuncAdmissao: # Contratação
             time.sleep(10)
             msg_lancamento.empty()
         else:
-            self.conecta_mysql()
-
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
             
-            comando = f""" INSERT INTO cadastro_funcionario (nome, data_contratacao, data_exame_admissional, 
-                                                            documentacao_admissional, setor, cargo,
-                                                            contabilidade_admissional, observacao_admissional, 
-                                                            dt_atualizado) 
-                            VALUES (
-                                    '{self.nome_funcionario}', '{self.data_contratacao}', '{self.exame_admissional}',
-                                    '{self.doc_recebidos}', '{self.setor}', '{self.cargo}',
-                                    '{self.doc_contabilidade}', '{self.observacao_func_admissao}',
-                                    '{dt_atualizo}'
-                                    )"""
+            self.conecta_mysql()
+            metadata = MetaData()
+            admissao_func_table = Table('cadastro_funcionario', metadata,
+                Column('ID', Integer, primary_key=True),
+                Column('nome', String),
+                Column('data_contratacao', String),
+                Column('data_exame_admissional', String),
+                Column('documentacao_admissional', String),
+                Column('setor', String),
+                Column('cargo', String),
+                Column('contabilidade_admissional', String),
+                Column('observacao_admissional', String),
+                Column('dt_atualizado', DateTime)
+            )
 
-            self.cursor.execute(comando)
-            self.cursor.commit()
+            # Definindo os valores para inserção
+            valores = {
+                'data_contratacao': self.data_contratacao,
+                'data_exame_admissional': self.exame_admissional,
+                'documentacao_admissional': self.doc_recebidos,
+                'setor': self.setor,
+                'cargo': self.cargo,
+                'contabilidade_admissional': self.doc_contabilidade,
+                'observacao_admissional': self.observacao_func_admissao,
+                'dt_atualizado': dt_atualizo
+            }
 
-            self.desconecta_bd()
+            # Criando uma instrução de INSERT
+            stmt = update(admissao_func_table).where(admissao_func_table.c.nome == self.nome_funcionario).values(valores)
+            # Executando a instrução de INSERT
+            self.session.execute(stmt)
+            # Confirmar a transação
+            self.session.commit()
+            # Fechando a sessão
+            self.session.close()
+            print('Fechou conexão')
+
             # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
             msg_lancamento = st.empty()
             msg_lancamento.success("Lançamento Realizado com Sucesso!", icon='✅')
@@ -324,10 +384,11 @@ class FuncAdmissao: # Contratação
             # fazer com que apos 5 segundos a mensagem de sucesso apague PENDENTE
 
     def dataframe_admissao(self):
+        FuncCadastro.atualizar_func_cadastro()
         FiltrosFuncionarios.filtros_funcionarios(self)
         # TABELAS DE CADASTRO - aplicando os filtros
         # estou dropando as linhas em brando da coluna data_contratação
-        self.valores_admissao = df_cadastro.dropna(subset=['data_contratacao'])[self.filtro_nome_func & self.filtro_cargo & 
+        self.valores_admissao = self.df_cadastro.dropna(subset=['data_contratacao'])[self.filtro_nome_func & self.filtro_cargo & 
                                                                                 self.filtro_setor & self.filtro_data_contratacao]        
         # total de pagamentos
         self.df_admissao = self.valores_admissao.drop(['rg', 'cpf','carteira_trabalho', 'endereco', 'numero', 'bairro', 'cidade', 
@@ -433,16 +494,25 @@ class FuncAdmissao: # Contratação
                         msg_lancamento.empty()
 
 class FuncPagamento:
+    def atualizar_df_pg_funcionario(self):
+        consulta = Conexao.conecta_bd()
+        self.df_pg_funcionario = consulta[10]
+
     def widget_pagamento(self):
+        FuncCadastro.atualizar_func_cadastro()
+
+        self.lista_tipo_pagamento = ['Salário', 'Adiantamento', 'Vale', 'Vale Transporte', 'Extra', 'Rescisão', 'Comissão', 
+                                        'Férias', '13° Salário']
+        
         with st.form(key='func_pagamento', clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está preenchido, me retornando o dataframe inteiro
-                funcionario_contratado = df_cadastro[df_cadastro['data_contratacao'].notna() | df_cadastro['data_contratacao'].notnull()]
+                funcionario_contratado = self.df_cadastro[self.df_cadastro['data_contratacao'].notna() | self.df_cadastro['data_contratacao'].notnull()]
 
                 self.nome_funcionario = st.selectbox('Nome', funcionario_contratado['nome'],index=None, placeholder='Selecione o funcionário')
                 self.data_pagamento_func = st.date_input('Data Pagamento', format='DD/MM/YYYY', value=None)
-                self.tipo_pg_func = st.selectbox('Tipo Pagamento', lista_tipo_pagamento, index=None, 
+                self.tipo_pg_func = st.selectbox('Tipo Pagamento', self.lista_tipo_pagamento, index=None, 
                                                     placeholder='Selecione tipo pagamento')
             with col2:
                 lista_forma_pagamento = ['Conta Salário', 'Dinheiro', 'Transferência', 'Pix', 'Cheque', 'Multa Recisória']
@@ -473,32 +543,46 @@ class FuncPagamento:
             time.sleep(10)
             msg_lancamento.empty()       
         else:
-            self.conecta_mysql()
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+            self.conecta_mysql()
 
             # nesse INSERT eu tenho um SELECT no final que faz o preenchimento da chave secundária ID_cadastro na tabela pg_funcionario
-            comando = f""" 
-            INSERT INTO pg_funcionario (nome, data_pagamento, tipo_pagamento, forma_pagamento, valor_pago, ID_cadastro, dt_atualizado) 
-            VALUES (
-                '{self.nome_funcionario}', 
-                '{self.data_pagamento_func}', 
-                '{self.tipo_pg_func}', 
-                '{self.forma_pagamento}', 
-                '{self.pagamento_fuc}', 
-                (SELECT c.ID FROM cadastro_funcionario c WHERE c.nome = '{self.nome_funcionario}'),
-                '{dt_atualizo}'
-            )"""
+            # Construir a consulta SQL usando text()
+            comando = text("""
+                INSERT INTO pg_funcionario (nome, data_pagamento, tipo_pagamento, forma_pagamento,
+                                                        valor_pago, ID_cadastro, dt_atualizado) 
+                VALUES (
+                    :nome, 
+                    :data_pagamento_func, 
+                    :tipo_pg_func, 
+                    :forma_pagamento, 
+                    :pagamento_fuc, 
+                    (SELECT c.ID FROM cadastro_funcionario c WHERE c.nome = :nome),
+                    :dt_atualizado
+                )
+            """)
 
-            # comando = f""" INSERT INTO pg_funcionario (nome, data_pagamento, tipo_pagamento, forma_pagamento, valor_pago, 
-            #                                                 dt_atualizado) 
-            # VALUES (
-            #     '{self.nome_funcionario}', '{self.data_pagamento_func}', '{self.tipo_pg_func}', '{self.forma_pagamento}', 
-            #     '{self.pagamento_fuc}', '{dt_atualizo}')"""
+            query = text(f"SELECT c.ID FROM cadastro_funcionario c WHERE c.nome = :nome")
+            result = self.session.execute(query, {'nome': self.nome_funcionario})
+            ID_cadastro = result.scalar()
 
-            self.cursor.execute(comando)
-            self.cursor.commit()
+            valores = {
+                'nome': self.nome_funcionario,
+                'data_pagamento_func': self.data_pagamento_func,
+                'tipo_pg_func': self.tipo_pg_func,
+                'forma_pagamento': self.forma_pagamento,
+                'pagamento_fuc': self.pagamento_fuc,
+                'ID_cadastro': ID_cadastro,
+                'dt_atualizado': dt_atualizo
+            }
 
-            self.desconecta_bd()
+            # Execute a instrução SQL usando os valores e placeholders seguros
+            self.session.execute(comando, valores)
+            # Confirmar a transação
+            self.session.commit()
+            # Fechando a sessão
+            self.session.close()
+
             # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
             msg_lancamento = st.empty()
             msg_lancamento.success("Lançamento Realizado com Sucesso!", icon='✅')
@@ -509,40 +593,32 @@ class FuncPagamento:
     def dataframe_pg_funcionario(self):
         FiltrosFuncionarios.filtros_funcionarios(self)
 
+        self.atualizar_df_pg_funcionario()
         # Filtrando data funcionarios ativos
         data_inicial = str(self.filtro.data_inicial)
         data_final = str(self.filtro.data_final)
 
-        df_pg_funcionario['data_pagamento'] = pd.to_datetime(df_pg_funcionario['data_pagamento'], format='%Y-%m-%d', errors='coerce')
-        filtro_data_pagamento = (df_pg_funcionario['data_pagamento'] >= data_inicial) & (df_pg_funcionario['data_pagamento'] <= data_final)
+        self.df_pg_funcionario['data_pagamento'] = pd.to_datetime(self.df_pg_funcionario['data_pagamento'], format='%Y-%m-%d', errors='coerce')
+        filtro_data_pagamento = (self.df_pg_funcionario['data_pagamento'] >= data_inicial) & (self.df_pg_funcionario['data_pagamento'] <= data_final)
         
 
         # criando filtro dataframe
         # Verificar se a lista 'self.filtro.varNomeFunc' está vazia
         if self.filtro.varNomeFunc:
-            filtro_nome_func = df_pg_funcionario['nome'].isin(self.filtro.varNomeFunc)
+            filtro_nome_func = self.df_pg_funcionario['nome'].isin(self.filtro.varNomeFunc)
         else:
-            filtro_nome_func = pd.Series([True] * len(df_pg_funcionario)) # se a lista estiver vazia, considera todos os valores como verdadeiros
+            filtro_nome_func = pd.Series([True] * len(self.df_pg_funcionario)) # se a lista estiver vazia, considera todos os valores como verdadeiros
 
         # TABELAS DE CADASTRO - aplicando os filtros
-        self.valores_pg_func = df_pg_funcionario[filtro_nome_func & filtro_data_pagamento]
+        self.valores_pg_func = self.df_pg_funcionario[filtro_nome_func & filtro_data_pagamento]
 
     def edicao_pg_func_table(self):
         self.dataframe_pg_funcionario()
-
+        self.lista_forma_pagamento = ['Conta Salário', 'Dinheiro', 'Transferência', 'Pix', 'Cheque', 'Multa Recisória']
+        
         col1, col2, col3, col4, col5 = st.columns([1, 1.5, 1.5, 1, 3])        
         with col1:
             df = self.valores_pg_func
-
-            # # Filtrando data funcionarios ativos
-            # data_inicial = str(self.filtro.data_inicial)
-            # data_final = str(self.filtro.data_final)
-
-            # df['data_pagamento'] = pd.to_datetime(df['data_pagamento'], format='%Y-%m-%d', errors='coerce')
-            # filtro_data_pagamento = (df['data_pagamento'] >= data_inicial) & (df['data_pagamento'] <= data_final)
-
-            # df = df[filtro_data_pagamento]
-
 
             filtro_ID = st.multiselect('ID', df['ID'], placeholder='', key=4)
         with col2:
@@ -584,8 +660,8 @@ class FuncPagamento:
             'nome': st.column_config.TextColumn('Nome'),
             'data_pagamento': st.column_config.DateColumn('Data Pagamento', format='DD/MM/YYYY'),   
             'valor_pago': st.column_config.NumberColumn('Valor Pago', format='$ %d'),
-            'tipo_pagamento': st.column_config.SelectboxColumn('Tipo de Pagamento', options=lista_tipo_pagamento, required=True),
-            'forma_pagamento': st.column_config.SelectboxColumn('Forma de Pagamento', options=lista_forma_pagamento, required=True),
+            'tipo_pagamento': st.column_config.SelectboxColumn('Tipo de Pagamento', options=self.lista_tipo_pagamento, required=True),
+            'forma_pagamento': st.column_config.SelectboxColumn('Forma de Pagamento', options=self.lista_forma_pagamento, required=True),
             'dt_atualizado': st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A'),
         }
         # num_rows = 'dynamic' é um parametro para habilitar a inclusão de linhas
@@ -596,6 +672,7 @@ class FuncPagamento:
                                          column_order=['ID', 'nome', 'data_pagamento', 'valor_pago', 'tipo_pagamento',
                                                         'forma_pagamento', 'dt_atualizado'], 
                                          hide_index=True)
+        # st.write(df)
         # Função para atualizar dados no banco de dados
         def update_data(df):
             self.conecta_mysql2()
@@ -630,13 +707,62 @@ class FuncPagamento:
                         time.sleep(10)
                         msg_lancamento.empty()
 
+    def tableau_pg_funcionario(self):
+        # chamando a classe FuncCadastro e o metodo dataframe_cadastro
+        FuncCadastro.dataframe_cadastro(self)
+
+        df = self.valores_pg_func
+        df = self.valores_pg_func.drop(['ID', 'dt_atualizado'], axis=1)
+
+        df_cadastro_func = self.valores_cadastro.drop(['nome', 'rg', 'cpf', 'carteira_trabalho', 'endereco', 'numero', 'bairro', 'cidade',
+                                                       'telefone', 'banco', 'agencia', 'conta', 'data_contratacao', 'salario', 
+                                                       'documentacao_admissional', 'data_exame_admissional', 'contabilidade_admissional',
+                                                       'observacao_admissional', 'data_desligamento', 'devolucao_uniforme',
+                                                       'data_exame_demissional', 'data_homologacao', 'tipo_desligamento',
+                                                       'contabilidade_rescisao', 'observacao_demissional', 'status_admissao', 'status_rescisao',
+                                                       'dt_atualizado'], axis=1)
+
+        # mesclando pg_funcionarios com cadastro para pegar os pagamentos por setor e cargo
+        df_merged = pd.merge(df, df_cadastro_func, left_on='ID_cadastro', right_on='ID', how='left')
+
+        df.loc[:, 'valor_pago'] = pd.to_numeric(df['valor_pago'], errors='coerce')
+
+        df = df_merged.rename(columns={
+            'nome': 'Nome',
+            'data_pagamento': 'Data Pagamento',
+            'valor_pago': 'Valor Pago',
+            'tipo_pagamento': 'Tipo Pagamento',
+            'forma_pagamento': 'Forma Pagamento',
+            'setor': 'Setor',
+            'cargo': 'Cargo'
+        })
+
+        df = df.drop(['ID', 'ID_cadastro'], axis=1)
+
+        grafico_dinamico = StreamlitRenderer(df, spec="./json/pgfuncionario.json", spec_io_mode="rw")
+        renderer = grafico_dinamico
+        renderer.explorer()
+
 class FuncRescisao:
+    def funcionario_ativo(self):
+        df_cadastro = FuncCadastro.atualizar_func_cadastro()
+
+        self.df_funcionario_ativo = df_cadastro[df_cadastro['data_contratacao'].notna() & # valores não nulos
+                                    df_cadastro['data_contratacao'].notnull() & # valores que não estão vazios
+                                    df_cadastro['data_desligamento'].isna() & # valores nulos
+                                    df_cadastro['data_desligamento'].isnull()] # valores vazios
+        self.df_funcionario_desligado = df_cadastro[df_cadastro['data_desligamento'].notnull()] # valores que não estão vazios
+    
     def widget_rescisao(self):
+        lista_forma_desligamento = ['Dispensa sem justa causa', 'Demissão por justa causa', 'Pedido de demissão',
+                                             'Término do contrato', 'Rescisão indireta', 'Rescisão por culpa recíproca']
+        self.funcionario_ativo()
+
         with st.form(key='func_rescisao', clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está preenchido, me retornando o dataframe inteiro
-                self.nome_funcionario = st.selectbox('Nome', df_funcionario_ativo['nome'],
+                self.nome_funcionario = st.selectbox('Nome', self.df_funcionario_ativo['nome'],
                                                         index=None, 
                                                         placeholder='Funcionário'
                                                      )
@@ -681,27 +807,60 @@ class FuncRescisao:
             self.salvar_rescisao()
         
     def salvar_rescisao(self):
-        if self.nome_funcionario == '':
-            st.error('Nome de funcionário não é válido!', icon="🚨")
-        elif self.data_desligamento == '':
-            st.erro('Data de desligamento inválida!', icon="🚨")
+        # FiltrosFuncionarios.filtros_funcionarios(self)
+        if self.nome_funcionario == '' or self.nome_funcionario == None:
+            msg_lancamento = st.empty()
+            msg_lancamento.error('Nome de funcionário não é válido!', icon='🚨')
+            time.sleep(10)
+            msg_lancamento.empty()
+        elif self.data_desligamento == '' or self.data_desligamento == None:
+            msg_lancamento = st.empty()
+            msg_lancamento.error('Data de desligamento inválida!', icon="🚨")
+            time.sleep(10)
+            msg_lancamento.empty()
         else:
-            self.conecta_mysql()
-
             dt_atualizo = datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+            self.conecta_mysql()
             
-            comando = f""" INSERT INTO cadastro_funcionario (nome, devolucao_uniforme, data_exame_demissional, 
-                                                            contabilidade_rescisao, data_desligamento, data_homologacao,  
-                                                            status_rescisao, tipo_desligamento, observacao_demissional, dt_atualizado) 
-            VALUES (
-                '{self.nome_funcionario}', '{self.entrega_uniforme}', '{self.exame_demissional}', '{self.doc_contabilidade}', 
-                '{self.data_desligamento}', '{self.homologacao}', '{self.status_rescisao}', '{self.forma_desligamento},
-                 '{self.observacao_rescisao}', '{dt_atualizo}')"""
+            metadata = MetaData()
+            rescisao_func_table = Table('cadastro_funcionario', metadata,
+                Column('ID', Integer, primary_key=True),
+                Column('nome', String),
+                Column('devolucao_uniforme', String),
+                Column('data_exame_demissional', String),
+                Column('contabilidade_rescisao', String),
+                Column('data_desligamento', DateTime),
+                Column('data_homologacao', DateTime),
+                Column('status_rescisao', String),
+                Column('tipo_desligamento', String),
+                Column('observacao_demissional', String),
+                Column('dt_atualizado', DateTime)
+            )
 
-            self.cursor.execute(comando)
-            self.cursor.commit()
+            # Definindo os valores para inserção
+            valores = {
+                'nome': self.nome_funcionario,
+                'devolucao_uniforme': self.entrega_uniforme,
+                'data_exame_demissional': self.exame_demissional,
+                'contabilidade_rescisao': self.doc_contabilidade,
+                'data_desligamento': self.data_desligamento,
+                'data_homologacao': self.homologacao,
+                'status_rescisao': self.status_rescisao,
+                'tipo_desligamento': self.forma_desligamento,
+                'observacao_demissional': self.observacao_rescisao,
+                'dt_atualizado': dt_atualizo
+            }
 
-            self.desconecta_bd()
+            # Criando uma instrução de INSERT
+            stmt = update(rescisao_func_table).where(rescisao_func_table.c.nome == self.nome_funcionario).values(valores)
+            # Executando a instrução de INSERT
+            self.session.execute(stmt)
+            # Confirmar a transação
+            self.session.commit()
+            # Fechando a sessão
+            self.session.close()
+            print('Fechou conexão')
+
             # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
             msg_lancamento = st.empty()
             msg_lancamento.success("Lançamento Realizado com Sucesso!", icon='✅')
@@ -711,8 +870,8 @@ class FuncRescisao:
 
     def dataframe_rescisao(self):
         FiltrosFuncionarios.filtros_funcionarios(self)
-        df = df_funcionario_ativo[self.filtro_nome_func & self.filtro_data_contratacao & self.filtro_cargo & self.filtro_setor]
-        self.df_rescisao = df.drop(['setor', 'rg', 'cpf', 'carteira_trabalho', 'endereco', 'numero',
+        # df = self.df_funcionario_ativo[self.filtro_nome_func & self.filtro_data_contratacao & self.filtro_cargo & self.filtro_setor]
+        self.df_rescisao = self.df_funcionario_desligado.drop(['setor', 'rg', 'cpf', 'carteira_trabalho', 'endereco', 'numero',
                                     'bairro', 'cidade', 'telefone', 'banco', 'agencia', 'conta',
                                     'data_contratacao', 'setor', 'cargo','salario', 'documentacao_admissional',
                                     'data_exame_admissional', 'contabilidade_admissional', 
@@ -755,8 +914,8 @@ class FuncRescisao:
             'ID': st.column_config.NumberColumn('ID', format='%d'),
             'data_desligamento': st.column_config.DateColumn('Data Desligamento', format='DD/MM/YYYY'),
             'nome': st.column_config.TextColumn('Nome'),
-            'tipo_desligamento': st.column_config.SelectboxColumn('Forma Desligamento', options=lista_forma_pagamento, required=True),
-            'tipo_pagamento':st.column_config.SelectboxColumn('Pagamento', options=lista_tipo_pagamento, required=True),
+            'tipo_desligamento': st.column_config.SelectboxColumn('Forma Desligamento', options=self.lista_forma_pagamento, required=True),
+            'tipo_pagamento':st.column_config.SelectboxColumn('Pagamento', options=self.lista_tipo_pagamento, required=True),
             'data_exame_demissional': st.column_config.DateColumn('Exame Demissional', format='DD/MM/YYYY'),
             'data_homologacao': st.column_config.DateColumn('Homologação', format='DD/MM/YYYY'),
             'status_rescisao': st.column_config.SelectboxColumn('Status Rescisão', options=['Pendente', 'Concluído'], required=True),
@@ -811,18 +970,22 @@ class FuncRescisao:
 
 class FuncResumo:
     def card_resumo_Fuc(self):
+        self.funcionario_ativo()
+        consulta = FuncCadastro.atualizar_func_cadastro()
+        self.df_cadastro = consulta
+    
         # Filtrando data
         data_inicial = str(self.filtro.data_inicial)
         data_final = str(self.filtro.data_final)
 
-        df_data_func_ativo = (df_funcionario_ativo['data_contratacao'] >= data_inicial) & (df_funcionario_ativo['data_contratacao'] <= data_final)
-        df_data_func_contratado = (df_cadastro['data_contratacao'] >= data_inicial) & (df_cadastro['data_contratacao'] <= data_final)
-        df_data_func_demitido = (df_cadastro['data_desligamento'] >= data_inicial) & (df_cadastro['data_desligamento'] <= data_final)
+        df_data_func_ativo = (self.df_funcionario_ativo['data_contratacao'] >= data_inicial) & (self.df_funcionario_ativo['data_contratacao'] <= data_final)
+        df_data_func_contratado = (self.df_cadastro['data_contratacao'] >= data_inicial) & (self.df_cadastro['data_contratacao'] <= data_final)
+        df_data_func_demitido = (self.df_cadastro['data_desligamento'] >= data_inicial) & (self.df_cadastro['data_desligamento'] <= data_final)
 
         # Aplicando os filtros
-        df_ativo_func = df_funcionario_ativo[df_data_func_ativo]
-        df_contratado_func = df_cadastro[df_data_func_contratado]
-        df_desliga_func = df_cadastro[df_data_func_demitido]
+        df_ativo_func = self.df_funcionario_ativo[df_data_func_ativo]
+        df_contratado_func = self.df_cadastro[df_data_func_contratado]
+        df_desliga_func = self.df_cadastro[df_data_func_demitido]
         
         # dataframe pg_funcionario
         self.dataframe_pg_funcionario()
@@ -851,16 +1014,17 @@ class FuncResumo:
         pg_tipo_pagamento = pg_tipo_pagamento.reset_index()
         pg_tipo_pagamento = pg_tipo_pagamento.rename(columns={'tipo_pagamento': 'Tipo Pagamento', 'valor_pago': 'Valor Pago'})     
 
-        dropar_colunas = ["ID_x", "nome_x", "rg", "cpf", "carteira_trabalho", "endereco", "numero", "bairro", "cidade", "telefone", "banco", 
-                          "agencia", "conta", "data_contratacao", "salario", "documentacao_admissional", "data_exame_admissional", 
-                          "contabilidade_admissional", "observacao_admissional", "data_desligamento", "devolucao_uniforme", 
-                          "data_exame_demissional", "data_homologacao", "tipo_desligamento", "contabilidade_rescisao", "observacao_demissional", 
-                          "status_admissao", "status_rescisao", "dt_atualizado_x", "ID_y", "nome_y", "data_pagamento", "forma_pagamento", "dt_atualizado_y"]
+        dropar_colunas = ["ID_x", "nome_x", "rg", "cpf", "carteira_trabalho", "endereco", "numero", "bairro", "cidade",
+                          "telefone", "banco", "agencia", "conta", "data_contratacao", "salario", "documentacao_admissional",
+                          "data_exame_admissional", "contabilidade_admissional", "observacao_admissional", "data_desligamento",
+                          "devolucao_uniforme", "data_exame_demissional", "data_homologacao", "tipo_desligamento",
+                          "contabilidade_rescisao", "observacao_demissional", "status_admissao", "status_rescisao",
+                          "dt_atualizado_x", "ID_y", "nome_y", "data_pagamento", "forma_pagamento", "dt_atualizado_y"]
 
         # Agrupando tabelas
         # Mesclar os DataFrames com base no ID
         df_merge = pd.merge(df_ativo_func, df, left_on='ID', right_on='ID_cadastro')
-        df_merge = pd.merge(df_cadastro, df, left_on='ID', right_on='ID_cadastro') #.drop(dropar_colunas, axis=1)
+        df_merge = pd.merge(self.df_cadastro, df, left_on='ID', right_on='ID_cadastro') #.drop(dropar_colunas, axis=1)
 
         # Agrupar por setor e calcular a soma dos valores pagos em cada setor
         pagamento_por_setor = df_merge.groupby('setor')['valor_pago'].sum()

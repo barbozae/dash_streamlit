@@ -4,6 +4,8 @@ import datetime as datetime
 from streamlit_option_menu import option_menu
 from filtro import Filtros
 from conexao import Conexao
+from noticias import Noticia
+from exportacao import Exportacao
 import pandas as pd
 
 
@@ -14,7 +16,6 @@ grupo_produto = consulta[3]
 classificacao = consulta[4]
 numero_boleto = consulta[5]
 produto = consulta[6]
-id_compra = consulta[7]
 df_cadastro_funcionarios = consulta[8]
 nome_funcionario = consulta[9]
 
@@ -65,6 +66,7 @@ class TelaPrincipal:
             placeholder='Escolha um grupo')
         
     def varProduto(self):
+        # produto_sem_none = [p for p in produto if p is not None]
         self.filtro.varProduto = st.multiselect(
             'Selecione o Produto:',
             produto,
@@ -77,15 +79,18 @@ class TelaPrincipal:
             placeholder='Digite número boleto')
 
     def varFormaPagamento(self):
+        # Exclua os valores em branco da coluna 'forma_pagamento'
+        forma_pagamento = df_compras.dropna(subset=['forma_pagamento'])
+
         self.filtro.varFormaPagamento = st.multiselect(
-            'Selecione forma de pagaemnto',
-            df_compras['forma_pagamento'].unique()
+            'Selecione forma de pagamento',
+            forma_pagamento['forma_pagamento'].unique()
         )
 
     def varIDCompra(self):
         self.filtro.varIDCompra = st.multiselect(
             'Selecione ID',
-            id_compra,
+            df_compras['ID'],
             placeholder='Digite número ID')
     
     # FILTROS PESSOAS
@@ -127,12 +132,23 @@ class TelaPrincipal:
     # SIDERBAR
     def sidebar_vendas(self):
         with st.sidebar:
+            # st.image('logo.jpg', width=None)
             self.varDataInicial()
             self.varDataFinal()
             self.varPeriodo()
 
+            Exportacao.download_vendas(self)
+            # Chama o método estático para obter as notícias
+            articles = Noticia.get_noticias()
+            if articles:
+                # Exibe as notícias chamando o método estático para mostrar as notícias
+                Noticia.show_news(articles)
+            else:
+                st.write("Não foi possível carregar as notícias. Tente novamente mais tarde.")
+
     def sidebar_compras(self):
         with st.sidebar:
+            # st.image('logo.jpg')
             self.varDataInicial()
             self.varDataFinal()
             self.varIDCompra()
@@ -142,26 +158,34 @@ class TelaPrincipal:
             self.varProduto()
             self.varNumeroBoleto()
             self.varFormaPagamento()
+            Exportacao.download_compras(self)
     
     def sidebar_pessoas(self):
         with st.sidebar:
+            # st.image('logo.jpg')
             self.varDataInicial()
             self.varDataFinal()
             self.varNomeFunc()
             self.varCargo()
             self.varSetor()
             self.varDataContratacao()
+            st.write('---')
+            with st.expander(label='Exportar Tabelas', expanded=False):
+                Exportacao.download_cadastro(self)
+                Exportacao.download_admissao(self)
+                Exportacao.download_pg_func(self)
 
     def sidebar_fechamento(self):
         with st.sidebar:
+            # st.image('logo.jpg', width=None)
             self.varDataInicial()
             self.varDataFinal()
 
     def home(self):
-        # Sistema
-        # st.title('Restaurante Fictício')
-        st.header('Restaurante Fictício')
-        st.write('---------')
+        # Use st.markdown() para adicionar um cabeçalho personalizado com HTML e CSS
+        st.markdown(
+            f'<h2 style="color:#FF0000;">Restaurante Sushi</h2>',
+            unsafe_allow_html=True)
         
         # menu de navegação - é possivel colocar dentro do sideBar
         self.selected = option_menu(
@@ -169,7 +193,7 @@ class TelaPrincipal:
         menu_icon = 'cast', # icone do titulo
         options = ['Vendas', 'Compras', 'Pessoas', 'Fechamento'],
         # link para consultar os nomes dos icones https://icons.getbootstrap.com/
-        icons = ['receipt', 'wallet2', 'grid', 'bar-chart'],    # bell
+        icons = ['receipt', 'wallet2', 'people-fill', 'bar-chart'],    # bell, grid
         default_index = 0,
         orientation='horizontal')
         
@@ -184,11 +208,19 @@ class TelaPrincipal:
             self.navegacao_funcionarios()
         else:
             self.sidebar_fechamento()
-            st.markdown('Resumo das Vendas')
-            self.cards_resumo_vendas()
-            st.write('---')
-            st.markdown('Resumo das Compras')
-            self.cards_resumo_compras()
-            st.write('---')
-            st.markdown('Resumo da Mão de Obra')
-            self.card_resumo_Fuc()
+            tab1, tab2, tab3, tab4 = st.tabs(['Resumo', 'Análise Vendas', 'Análise Compras', 'Análise Funcionários'])
+            with tab1:
+                st.markdown('Resumo das Vendas')
+                self.cards_resumo_vendas()
+                st.write('---')
+                st.markdown('Resumo das Compras')
+                self.cards_resumo_compras()
+                st.write('---')
+                st.markdown('Resumo da Mão de Obra')
+                self.card_resumo_Fuc()
+            with tab2:
+                self.tableau_vendas()
+            with tab3:
+                self.tableau_compras()
+            with tab4:
+                self.tableau_pg_funcionario()

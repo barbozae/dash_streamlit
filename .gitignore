@@ -1,6 +1,8 @@
-carrregar_tabelas.py
-lancamento_vendas.py
 tabela_dinamica.py
 teste_menu.py
 teste.py
+generate_key.py
+hashed_pw.pkl
+lancamento_vendas.py
+walker.ipynb
 __pycache__
