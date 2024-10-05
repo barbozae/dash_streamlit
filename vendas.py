@@ -203,7 +203,7 @@ class Vendas:
             self.conecta_mysql()
 
             metadata = MetaData()
-            vendas_table = Table('vendas_tojiro_zn', metadata,
+            vendas_table = Table('vendas', metadata,
                 Column('ID', Integer, primary_key=True),
                 Column('data_venda', DateTime),
                 Column('periodo', String),
@@ -371,7 +371,7 @@ class Vendas:
             colunas_disponiveis = df.columns.tolist()
 
             for index, row in df.iterrows():
-                query = "UPDATE vendas_tojiro_zn SET "
+                query = "UPDATE vendas SET "
                 valores = []
                 for coluna in colunas_disponiveis:
                     # Verificar se a coluna está presente no índice da linha atual
