@@ -635,6 +635,7 @@ class Compras:
         # Bloquear algumas colunas da edição
         colunas_bloqueadas = {
         'dt_atualizado': {'editable': False},
+        'fornecedor': {'editable': False},
         'ID': {'editable': False}
         }
 
@@ -650,7 +651,7 @@ class Compras:
                 'numero_boleto': st.column_config.TextColumn('Número Boleto'),
                 'grupo_produto': st.column_config.SelectboxColumn('Grupo', options=self.df_compras['grupo_produto'], required=True),
                 'produto': st.column_config.SelectboxColumn('Produto', options=self.df_compras['produto'], required=True),
-                'classificacao': st.column_config.SelectboxColumn('Classificação', options=self.classificacao, required=True),
+                'classificacao': st.column_config.SelectboxColumn('Classificação', options=self.df_compras['classificacao'].unique(), required=True),
                 'forma_pagamento': st.column_config.SelectboxColumn('Forma Pagamento', options=self.tipo_pagamento, required=True),
                 'observacao': st.column_config.TextColumn('Observação'),
                 'dt_atualizado':st.column_config.DatetimeColumn('Atualizado', format='DD/MM/YYYY- h:mm A')}
