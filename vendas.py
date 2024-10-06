@@ -80,13 +80,6 @@ class Vendas:
         self.valores_vendas.loc[:, 'qtd_rodizio'] = pd.to_numeric(self.valores_vendas['qtd_rodizio'], errors='coerce')
 
         # Converter as colunas para o tipo de dados numérico, tratando valores não numéricos como NaN
-        # colunas_para_converter = ['debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
-        #            'credito_visa', 'credito_elo', 'alelo', 'american_express', 'hiper', 
-        #            'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio']
-        
-        # self.valores_vendas[colunas_para_converter] = self.valores_vendas[colunas_para_converter].apply(pd.to_numeric, errors='coerce')
-
-        # Converter as colunas para o tipo de dados numérico, tratando valores não numéricos como NaN
         self.valores_vendas.loc[:, 'debito_mastercard'] = pd.to_numeric(self.valores_vendas['debito_mastercard'], errors='coerce')
         self.valores_vendas.loc[:, 'debito_visa'] = pd.to_numeric(self.valores_vendas['debito_visa'], errors='coerce')
         self.valores_vendas.loc[:, 'debito_elo'] = pd.to_numeric(self.valores_vendas['debito_elo'], errors='coerce')
@@ -136,7 +129,7 @@ class Vendas:
 
         self.debito = self.debito_martercard + self.debito_visa + self.debito_elo
         self.credito = self.credito_mastercard + self.credito_visa + self.credito_elo
-        self.outros_cartoes = self.hiper + self.american_express + self.alelo + self.sodexo + self.ticket_rest + self.vale_refeicao + self.dinersclub
+        self.outros_cartoes = self.american_express + self.alelo + self.sodexo + self.ticket_rest + self.vale_refeicao + self.dinersclub + self.hiper
         self.total_vendas = self.dinheiro + self.pix + self.debito + self.credito + self.outros_cartoes
         self.ticket_medio = self.total_vendas / self.rodizio
 
@@ -218,7 +211,7 @@ class Vendas:
                 Column('credito_elo', Float),
                 Column('american_express', Float),
                 Column('alelo', Float),
-                Column('hiper', Float),
+                # Column('hiper', Float),
                 Column('sodexo', Float),
                 Column('ticket_rest', Float),
                 Column('vale_refeicao', Float),
@@ -234,7 +227,7 @@ class Vendas:
                 'qtd_rodizio': int(self.rodizio),
                 'dinheiro': float(self.dinheiro),
                 'pix': float(self.pix),
-                'debito_mastercard': float(self.debito_martercard),
+                'debito_mastercard': float(self.debito_mastercard),
                 'debito_visa': float(self.debito_visa),
                 'debito_elo': float(self.debito_elo),
                 'credito_mastercard': float(self.credito_mastercard),
@@ -242,7 +235,7 @@ class Vendas:
                 'credito_elo': float(self.credito_elo),
                 'american_express': float(self.american_express),
                 'alelo': float(self.alelo),
-                'hiper': float(self.hiper),
+                # 'hiper': float(self.hiper),
                 'sodexo': float(self.sodexo),
                 'ticket_rest': float(self.ticket_rest),    
                 'vale_refeicao': float(self.vale_refeicao),
@@ -251,7 +244,6 @@ class Vendas:
                 'dt_atualizado': dt_atualizo
             }
 
-            # Criando uma instrução de INSERT
             stmt = insert(vendas_table).values(valores)
             # Executando a instrução de INSERT
             self.session.execute(stmt)
@@ -450,9 +442,28 @@ class Vendas:
             # excluir as colunas selecionadas no widget
             excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
 
-            df = self.valores_vendas.drop(excluir_coluna, axis=1)
 
-            df['data_venda'] = pd.to_datetime(df['data_venda']).dt.strftime('%d/%m/%Y')
+
+
+
+            formas_pagamento = ['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo',
+                                'credito_mastercard', 'credito_visa', 'credito_elo', 'alelo', 'american_express',
+                                'sodexo', 'ticket_rest', 'vale_refeicao', 'hiper', 'dinersclub', 'socio']
+
+            df = self.valores_vendas.copy()
+            # Calcula a coluna de total
+            df['total'] = df[formas_pagamento].sum(axis=1).round(2)
+
+            df = df.drop(excluir_coluna, axis=1)
+
+
+
+
+
+
+            # df = self.valores_vendas.drop(excluir_coluna, axis=1)
+
+            # df['data_venda'] = pd.to_datetime(df['data_venda']).dt.strftime('%d/%m/%Y')
 
             colunas_formatada = {
             'ID': st.column_config.NumberColumn('ID', format='%d', min_value=1, max_value=500),
@@ -475,18 +486,20 @@ class Vendas:
             'vale_refeicao': st.column_config.NumberColumn('Vale Refeição', format='$%f', min_value=0, max_value=25000),
             'dinersclub': st.column_config.NumberColumn('DinersClub', format='$%f', min_value=0, max_value=25000),
             'socio': st.column_config.NumberColumn('Sócio', format='$%f', min_value=0, max_value=2000),
+            'total': st.column_config.NumberColumn('Total', format='$%f', min_value=0, max_value=2000),
             'dt_atualizado': st.column_config.DatetimeColumn('Atualizando', format='DD/MM/YYYY- h:mm A'),
             }
 
             # Aplicando a formatação apenas nas colunas que ainda existem
             colunas_formatadas_existem = {key: value for key, value in colunas_formatada.items() if key in df.columns}
 
-            tabela_vendas = st.dataframe(df.style.highlight_max(axis=0, subset=['qtd_rodizio']), hide_index=True,
+            tabela_vendas = st.dataframe(df,
+                                         hide_index=True,
                                          column_config=colunas_formatadas_existem,
                                          column_order=['ID', 'data_venda', 'periodo', 'qtd_rodizio', 'dinheiro', 'pix', 
                                                             'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 
                                                             'credito_visa', 'credito_elo', 'alelo', 'hiper', 'american_express', 
-                                                            'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'socio',
+                                                            'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'total', 'socio',
                                                             'dt_atualizado'])
             
         with st.expander('Gráfico das Vendas - Visão diária e por período'):
