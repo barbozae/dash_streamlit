@@ -63,8 +63,8 @@ class Compras:
 
         # Utilizado no arquivo resumo
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial     # formato da data'2023-05-01'
+        data_final = self.filtro.data_final
         filtro_data_compras = (self.df_compras['data_compra'] >= data_inicial) & (self.df_compras['data_compra'] <= data_final)
     
         valores_classificacao = self.df_compras[filtro_data_compras]
@@ -113,8 +113,8 @@ class Compras:
         self.df_compras = tabela[0]
 
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial     # formato da data'2023-05-01'
+        data_final = self.filtro.data_final
         filtro_data_compras = (self.df_compras['data_compra'] >= data_inicial) & (self.df_compras['data_compra'] <= data_final)
    
         # filtrando fornecedor
@@ -184,8 +184,8 @@ class Compras:
         self.df_compras = tabela[0]
     
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial     # formato da data'2023-05-01'
+        data_final = self.filtro.data_final
         df_pagamentos = self.df_compras
 
         filtro_data_pagamentos = (df_pagamentos['data_pagamento'] >= data_inicial) & (df_pagamentos['data_pagamento'] <= data_final)
@@ -254,8 +254,8 @@ class Compras:
 
     def dataframe_vencimento(self):
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial     # formato da data'2023-05-01'
+        data_final = self.filtro.data_final
 
         filtro_data_vencimento = (self.df_compras['data_vencimento'] >= data_inicial) & (self.df_compras['data_vencimento'] <= data_final)
    
@@ -322,8 +322,8 @@ class Compras:
 
     def dataframe_vencido(self):
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)     # formato da data'2023-05-01'
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial     # formato da data'2023-05-01'
+        data_final = self.filtro.data_final
 
         filtro_data_vencida = (
             (self.df_compras['data_vencimento'] >= data_inicial) & \
