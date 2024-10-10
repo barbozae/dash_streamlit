@@ -36,18 +36,17 @@ class Vendas:
 
         # Cards das vendas
         # a função millify serve para abreviar o valor $8.000 para $8k
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric('Credito', '${}'.format(millify(self.credito)), '{:.4}%'.format(self.credito /self.total_vendas * 100))
-        col2.metric('Débito', '${}'.format(millify(self.debito)), '{:.4}%'.format(self.debito / self.total_vendas * 100))
-        col3.metric('Benefício', '${}'.format(millify(self.outros_cartoes)), '{:.4}%'.format(self.outros_cartoes / self.total_vendas * 100), 
+        col1.metric('Credito', '${:,.2f}'.format(self.credito), '{:.4}%'.format(self.credito /self.total_vendas * 100))
+        col2.metric('Débito', '${:,.2f}'.format(self.debito), '{:.4}%'.format(self.debito / self.total_vendas * 100))
+        col3.metric('Benefício', '${:,.2f}'.format(self.outros_cartoes), '{:.4}%'.format(self.outros_cartoes / self.total_vendas * 100), 
                     help='Cartões: Hiper - American Express - Alelo, Sodexo - Vale Refeição - Ticket Rest - DinersClub')
-        col4.metric('Dinheiro', '${}'.format(millify(self.dinheiro)), '{:.4}%'.format(self.dinheiro / self.total_vendas * 100))
+        col4.metric('Dinheiro', '${:,.2f}'.format(self.dinheiro), '{:.4}%'.format(self.dinheiro / self.total_vendas * 100))
         
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric('Pix', '${}'.format(millify(self.pix)), '{:.4}%'.format(self.pix / self.total_vendas * 100))
+        col1.metric('Pix', '${:,.2f}'.format(self.pix), '{:.4}%'.format(self.pix / self.total_vendas * 100))
         col2.metric('Total Vendas', '${:,.2f}'.format(round(self.total_vendas, 2)), help='Incluir a data do filtro')
         col3.metric('Rodízio', self.rodizio)
-        col4.metric('*Ticket Médio*', '${:.2f}'.format(self.ticket_medio))
+        col4.metric('*Ticket Médio*', '${:,.2f}'.format(self.ticket_medio))
 
         col1, col2 = st.columns(2)
         # col1.metric('Lucro', '${:,.2f}'.format(self.lucro), help='Fundamental conhecimento sobre os parametros de cálculo')
