@@ -461,19 +461,41 @@ class Compras:
         # Cards das vendas
         # a função millify serve para abreviar o valor $8.000 para $8k
         col1, col2, col3, col4, col5, col6  = st.columns(6)
-        col1.metric('Valor de Compra', '${}'.format(millify(self.valor_compras[0])))
-        col2.metric('Valor Pago', '${}'.format(millify(self.valor_pagamentos if np.isscalar(self.valor_pagamentos) 
-                                                       else self.valor_pagamentos[0])))
-        col3.metric('Valor a Pagar', '${}'.format(millify(self.valor_vencido if np.isscalar(self.valor_vencido)
-                                                            else self.valor_vencido[0])))
-        # Calcule o percentual - o if esta tratando se o valor for vazio
-        percentual_cmv = (float(self.cmv) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
-        percentual_gasto_fixo = (float(self.gasto_fixo) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
-        percentual_gasto_variavel = (float(self.gasto_variavel) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
+        # col1.metric('Valor de Compra', '${}'.format(millify(self.valor_compras[0])))
+        # col2.metric('Valor Pago', '${}'.format(millify(self.valor_pagamentos if np.isscalar(self.valor_pagamentos) 
+        #                                                else self.valor_pagamentos[0])))
+        # col3.metric('Valor a Pagar', '${}'.format(millify(self.valor_vencido if np.isscalar(self.valor_vencido)
+        #                                                     else self.valor_vencido[0])))
+        # # Calcule o percentual - o if esta tratando se o valor for vazio
+        # percentual_cmv = (float(self.cmv) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
+        # percentual_gasto_fixo = (float(self.gasto_fixo) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
+        # percentual_gasto_variavel = (float(self.gasto_variavel) / float(self.valor_compras[0]) * 100) if self.valor_compras.any() else 0
 
-        col4.metric('CMV', '${}'.format(millify(self.cmv)), '{:.4}%'.format(percentual_cmv))
-        col5.metric('Gasto Fixo', '${}'.format(millify(self.gasto_fixo)), '{:.3}%'.format(percentual_gasto_fixo))
-        col6.metric('Gasto Variável', '${}'.format(millify(self.gasto_variavel)), '{:.4}%'.format(percentual_gasto_variavel))
+        # col4.metric('CMV', '${}'.format(millify(self.cmv)), '{:.4}%'.format(percentual_cmv))
+        # col5.metric('Gasto Fixo', '${}'.format(millify(self.gasto_fixo)), '{:.3}%'.format(percentual_gasto_fixo))
+        # col6.metric('Gasto Variável', '${}'.format(millify(self.gasto_variavel)), '{:.4}%'.format(percentual_gasto_variavel))
+
+        # Verifica se 'self.valor_compras' é uma lista/array e não está vazio antes de acessar o índice 0 pois caso o índice seja zero obtenho um erro logo eu converto para 0
+        valor_compra = self.valor_compras[0] if isinstance(self.valor_compras, (list, np.ndarray)) and len(self.valor_compras) > 0 else self.valor_compras if np.isscalar(self.valor_compras) else 0
+        col1.metric('Valor de Compra', '${}'.format(millify(valor_compra)))
+
+        # Verifica se 'self.valor_pagamentos' é escalar ou tem um valor no índice 0
+        valor_pagamento = self.valor_pagamentos if np.isscalar(self.valor_pagamentos) else (self.valor_pagamentos[0] if isinstance(self.valor_pagamentos, (list, np.ndarray)) and len(self.valor_pagamentos) > 0 else 0)
+        col2.metric('Valor Pago', '${}'.format(millify(valor_pagamento)))
+
+        # Verifica se 'self.valor_vencido' é escalar ou tem um valor no índice 0
+        valor_vencido = self.valor_vencido if np.isscalar(self.valor_vencido) else (self.valor_vencido[0] if isinstance(self.valor_vencido, (list, np.ndarray)) and len(self.valor_vencido) > 0 else 0)
+        col3.metric('Valor a Pagar', '${}'.format(millify(valor_vencido)))
+
+        # Calcule os percentuais, garantindo que os valores existam
+        percentual_cmv = (float(self.cmv) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
+        percentual_gasto_fixo = (float(self.gasto_fixo) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
+        percentual_gasto_variavel = (float(self.gasto_variavel) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
+
+        # Garantir que os percentuais são float e formatar corretamente
+        col4.metric('CMV', '${}'.format(millify(self.cmv)), '{:.2f}%'.format(percentual_cmv))
+        col5.metric('Gasto Fixo', '${}'.format(millify(self.gasto_fixo)), '{:.2f}%'.format(percentual_gasto_fixo))
+        col6.metric('Gasto Variável', '${}'.format(millify(self.gasto_variavel)), '{:.2f}%'.format(percentual_gasto_variavel))
 
     def widget_compras(self):
         tabela = Compras.atualizar()
@@ -1061,3 +1083,10 @@ class Compras:
         grafico_dinamico = StreamlitRenderer(df, spec="./json/compras.json", spec_io_mode="rw")
         renderer = grafico_dinamico
         renderer.explorer()
+
+        # if not df.empty:
+        #     grafico_dinamico = StreamlitRenderer(df, spec="./json/compras.json", spec_io_mode="rw")
+        #     # renderer = grafico_dinamico
+        #     # renderer.explorer()
+        # else:
+        #     st.warning("Nenhum dado disponível para exibir no gráfico.")
