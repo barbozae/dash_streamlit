@@ -3,7 +3,7 @@ from pygwalker.api.streamlit import StreamlitRenderer
 import pandas as pd
 import numpy as np
 import time
-from millify import millify
+# from millify import millify
 from datetime import datetime
 from filtro import Filtros
 from conexao import Conexao
@@ -177,7 +177,6 @@ class Compras:
         # Somando todas as linhas por colunas
         # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
         self.valor_compras = np.nansum(array_compra, axis=0)
-        # self.valor_pagamentos = np.nansum(self.array_pagamentos, axis=0
   
     def dataframe_pagamentos(self):
         tabela = Compras.atualizar()
@@ -475,6 +474,12 @@ class Compras:
         # col5.metric('Gasto Fixo', '${}'.format(millify(self.gasto_fixo)), '{:.3}%'.format(percentual_gasto_fixo))
         # col6.metric('Gasto Variável', '${}'.format(millify(self.gasto_variavel)), '{:.4}%'.format(percentual_gasto_variavel))
 
+        # dataframe pg_funcionario
+        self.dataframe_pg_funcionario()
+        df_funcionarios = self.valores_pg_func
+        df_funcionarios['valor_pago'] = pd.to_numeric(df_funcionarios['valor_pago'])
+        self.pg_funcionarios = df_funcionarios['valor_pago'].sum()
+
         # Verifica se 'self.valor_compras' é uma lista/array e não está vazio antes de acessar o índice 0 pois caso o índice seja zero obtenho um erro logo eu converto para 0
         valor_compra = self.valor_compras[0] if isinstance(self.valor_compras, (list, np.ndarray)) and len(self.valor_compras) > 0 else self.valor_compras if np.isscalar(self.valor_compras) else 0
         col1.metric('Valor de Compra', '${:,.2f}'.format(valor_compra))
@@ -488,9 +493,9 @@ class Compras:
         col3.metric('Valor a Pagar', '${:,.2f}'.format(valor_vencido))
 
         # Calcule os percentuais, garantindo que os valores existam
-        percentual_cmv = (float(self.cmv) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
-        percentual_gasto_fixo = (float(self.gasto_fixo) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
-        percentual_gasto_variavel = (float(self.gasto_variavel) / float(valor_compra) * 100) if valor_compra != 0 else 0.0
+        percentual_cmv = (float(self.cmv) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
+        percentual_gasto_fixo = (float(self.gasto_fixo) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
+        percentual_gasto_variavel = (float(self.gasto_variavel) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
 
         # Garantir que os percentuais são float e formatar corretamente
         col4.metric('CMV', '${:,.2f}'.format(float(self.cmv)), '{:.2f}%'.format(percentual_cmv))
@@ -730,10 +735,36 @@ class Compras:
                 except Exception as e:
                     print(f"Erro ao executar a query: {query}")
                     print(f"Erro detalhado: {e}")
-                        
+            
+            st.rerun(scope='fragment')
             self.conn.commit()
             cursor.close()
             self.conn.close()
+
+
+
+
+
+            #     # Recarregar os dados do banco de dados usando a mesma conexão
+            # query = "SELECT * FROM compras"
+            # df_atualizado = pd.read_sql(query, self.conn)
+
+            # # Exibir os dados atualizados na página
+            # st.write(df_atualizado)
+
+            # # Fechar a conexão com o banco de dados
+            # cursor.close()
+            # self.conn.close()
+
+            # # Após a atualização, recarrega a página para refletir os novos dados
+            # st.experimental_rerun()
+
+
+
+
+
+            # cursor.close()
+            # self.conn.close()
 
         with col3:
             if st.button('Salvar Alterações'):
@@ -1050,14 +1081,16 @@ class Compras:
                         msg_lancamento.empty()
 
     def tableau_compras(self):
-        df = self.valores_pagamentos.drop(['ID', 'dt_atualizado'], axis=1)
-        
-        colunas = ['data_compra', 'data_vencimento', 'data_pagamento', 'fornecedor', 'valor_compra', 'valor_pago', 
-                   'qtd', 'numero_boleto', 'grupo_produto', 'produto', 'classificacao', 'forma_pagamento', 'observacao']
-        
+        df = self.valores_compras.drop(['ID', 'dt_atualizado'], axis=1)
         df['valor_compra'] = pd.to_numeric(df['valor_compra'], errors='coerce')
         df['valor_pago'] = pd.to_numeric(df['valor_pago'], errors='coerce')
 
+        # Calcula o valor total da coluna 'valor_compra'
+        valor_total = df['valor_compra'].sum() + self.pg_funcionarios
+
+        # Cria a nova coluna com a porcentagem de cada valor em relação ao total
+        df['Porcentagem'] = ((df['valor_compra'] / valor_total) * 100).round(2)
+        
         # Lista das colunas de data que você deseja converter
         colunas_de_data = ['data_compra', 'data_vencimento', 'data_pagamento']
 
@@ -1080,13 +1113,10 @@ class Compras:
             'forma_pagamento': 'Forma Pagamento'
         })
 
-        grafico_dinamico = StreamlitRenderer(df, spec="./json/compras.json", spec_io_mode="rw")
-        renderer = grafico_dinamico
-        renderer.explorer()
-
-        # if not df.empty:
-        #     grafico_dinamico = StreamlitRenderer(df, spec="./json/compras.json", spec_io_mode="rw")
-        #     # renderer = grafico_dinamico
-        #     # renderer.explorer()
-        # else:
-        #     st.warning("Nenhum dado disponível para exibir no gráfico.")
+        if df.empty:
+            st.warning('A tabela está vazia. Verifique os dados de entrada.')
+            st.write(df)
+        else:
+            grafico_dinamico = StreamlitRenderer(df, spec="./json/compras.json", spec_io_mode="rw")
+            renderer = grafico_dinamico
+            renderer.explorer()

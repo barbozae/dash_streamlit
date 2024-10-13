@@ -12,8 +12,12 @@ import calendar
 import time
 from filtro import Filtros
 from conexao import Conexao
-from io import BytesIO
-import os
+
+
+
+#TODO verificar a porcentagem dos indicadores cmv gasto fixo e inserir o valor de rescisao em todos app dos restaurantes
+
+
 
 
 class Vendas: 
@@ -38,6 +42,7 @@ class Vendas:
         # a função millify serve para abreviar o valor $8.000 para $8k
         col1, col2, col3, col4 = st.columns(4)
         col1.metric('Credito', '${:,.2f}'.format(self.credito), '{:.4}%'.format(self.credito /self.total_vendas * 100))
+        # col1.metric('Credito', '${}'.format(millify(self.credito)), '{:.4}%'.format(self.credito /self.total_vendas * 100))
         col2.metric('Débito', '${:,.2f}'.format(self.debito), '{:.4}%'.format(self.debito / self.total_vendas * 100))
         col3.metric('Benefício', '${:,.2f}'.format(self.outros_cartoes), '{:.4}%'.format(self.outros_cartoes / self.total_vendas * 100), 
                     help='Cartões: Hiper - American Express - Alelo, Sodexo - Vale Refeição - Ticket Rest - DinersClub')
@@ -55,7 +60,6 @@ class Vendas:
 
     def dataframe_vendas(self):
         consulta = Conexao.conecta_bd()
-        print('Conectado ao banco, dataframe_vendas')
         df_vendas = consulta[0]
 
         self.df_vendas = df_vendas
@@ -108,7 +112,7 @@ class Vendas:
         # Somando todas as linhas por colunas
         # somando cada coluna da array -> exemplo [279, 1548, 1514, 4848...] -> cada valor é o total de cada coluna
         self.total_colunas = np.nansum(self.array_vendas, axis=0)
-        
+
         self.dinheiro = self.total_colunas[0]
         self.pix = self.total_colunas[1]
         self.debito_martercard = self.total_colunas[2]
@@ -249,6 +253,12 @@ class Vendas:
             self.session.execute(stmt)
             # Confirmar a transação
             self.session.commit()
+
+
+
+
+
+
             # Fechando a sessão
             self.session.close()
 
@@ -387,8 +397,7 @@ class Vendas:
                 except Exception as e:
                     print(f"Erro ao executar a query: {query}")
                     print(f"Erro detalhado: {e}")
-                        
-            self.conn.commit()
+            self.conn.commit()        
             cursor.close()
             self.conn.close()
 
@@ -442,10 +451,6 @@ class Vendas:
             # excluir as colunas selecionadas no widget
             excluir_coluna = [nomes_alterados[coluna] if coluna in nomes_alterados else coluna for coluna in excluir_coluna]
 
-
-
-
-
             formas_pagamento = ['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo',
                                 'credito_mastercard', 'credito_visa', 'credito_elo', 'alelo', 'american_express',
                                 'sodexo', 'ticket_rest', 'vale_refeicao', 'hiper', 'dinersclub', 'socio']
@@ -455,15 +460,6 @@ class Vendas:
             df['total'] = df[formas_pagamento].sum(axis=1).round(2)
 
             df = df.drop(excluir_coluna, axis=1)
-
-
-
-
-
-
-            # df = self.valores_vendas.drop(excluir_coluna, axis=1)
-
-            # df['data_venda'] = pd.to_datetime(df['data_venda']).dt.strftime('%d/%m/%Y')
 
             colunas_formatada = {
             'ID': st.column_config.NumberColumn('ID', format='%d', min_value=1, max_value=500),
@@ -633,68 +629,35 @@ class Vendas:
             st.altair_chart(graf_vendas_mes + rotulos_valores, use_container_width=True)
 
     def tableau_vendas(self):
-        pass
-        # df = self.valores_vendas_30dias.drop(['ID', 'dt_atualizado'], axis=1)
-        # df['data_venda'] = pd.to_datetime(df['data_venda'], format='%Y-%m-%d')
-
-        # colunas = ['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 'socio',
-        #             'credito_elo', 'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub'] #, 'valor_total_30']
+        print(self.valores_vendas.columns)
+        df = self.valores_vendas.drop(['ID', 'dt_atualizado'], axis=1)
+        df['data_venda'] = pd.to_datetime(df['data_venda'], format='%Y-%m-%d')
+        colunas = ['qtd_rodizio',
+                    'dinheiro', 'pix', 
+                    'debito_mastercard', 'debito_visa', 'debito_elo', 
+                    'credito_mastercard', 'credito_visa', 'credito_elo', 
+                    'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub',
+                    'socio']
         
-        # for item in colunas:
-        #     df[item] = pd.to_numeric(df[item], errors='coerce')
+        for item in colunas:
+            df[item] = pd.to_numeric(df[item], errors='coerce')
 
-        # df['Total débito'] = df[['debito_mastercard', 'debito_visa', 'debito_elo',]].sum(axis=1)
-        # df['Total crédito'] = df[['credito_mastercard', 'credito_visa', 'credito_elo']].sum(axis=1)
-        # df['Outros Cartões'] = df[['hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub']].sum(axis=1)
-        # # df['Total'] = df[['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 
-        # #                   'credito_elo', 'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub']].sum(axis=1)
-        # df = df.drop(['debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 'credito_elo', 
-        #               'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub'], axis=1)
+        df['Total débito'] = df[['debito_mastercard', 'debito_visa', 'debito_elo',]].sum(axis=1)
+        df['Total crédito'] = df[['credito_mastercard', 'credito_visa', 'credito_elo']].sum(axis=1)
+        df['Outros cartões'] = df[['hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub']].sum(axis=1)
+        df['Total'] = df[['dinheiro', 'pix', 'Total débito', 'Total crédito', 'Outros cartões']].sum(axis=1)
+        df = df.drop(['debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 'credito_elo', 
+                      'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao'], axis=1)
 
-        # df = df.rename(columns={
-        #     'data_venda': 'Data',
-        #     'data_30': 'Data -30d',
-        #     'dinheiro': 'Dinheiro',
-        #     'pix': 'Pix',
-        #     'qtd_rodizio': 'Rodízio',
-        #     'socio': 'Sócios',
-        #     'periodo': 'Período',
-        #     'total': 'Total',
-        #     'valor_total_30': 'Total -30d'
-        # })
+        df = df.rename(columns={
+            'data_venda': 'Data',
+            'dinheiro': 'Dinheiro',
+            'pix': 'Pix',
+            'qtd_rodizio': 'Rodízio',
+            'socio': 'Sócios',
+            'periodo': 'Período'
+        })
 
-        # grafico_dinamico = StreamlitRenderer(df, spec="./json/vendas.json", spec_io_mode="rw")
-        # renderer = grafico_dinamico
-        # renderer.explorer()
-        # df = self.valores_vendas_30dias.drop(['ID', 'dt_atualizado'], axis=1)
-        # df['data_venda'] = pd.to_datetime(df['data_venda'], format='%Y-%m-%d')
-
-        # colunas = ['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 'socio',
-        #             'credito_elo', 'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub', 'valor_total_30']
-        
-        # for item in colunas:
-        #     df[item] = pd.to_numeric(df[item], errors='coerce')
-
-        # df['Total débito'] = df[['debito_mastercard', 'debito_visa', 'debito_elo',]].sum(axis=1)
-        # df['Total crédito'] = df[['credito_mastercard', 'credito_visa', 'credito_elo']].sum(axis=1)
-        # df['Outros Cartões'] = df[['hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub']].sum(axis=1)
-        # # df['Total'] = df[['dinheiro', 'pix', 'debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 
-        # #                   'credito_elo', 'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub']].sum(axis=1)
-        # df = df.drop(['debito_mastercard', 'debito_visa', 'debito_elo', 'credito_mastercard', 'credito_visa', 'credito_elo', 
-        #               'hiper', 'american_express', 'alelo', 'sodexo', 'ticket_rest', 'vale_refeicao', 'dinersclub'], axis=1)
-
-        # df = df.rename(columns={
-        #     'data_venda': 'Data',
-        #     'data_30': 'Data -30d',
-        #     'dinheiro': 'Dinheiro',
-        #     'pix': 'Pix',
-        #     'qtd_rodizio': 'Rodízio',
-        #     'socio': 'Sócios',
-        #     'periodo': 'Período',
-        #     'total': 'Total',
-        #     'valor_total_30': 'Total -30d'
-        # })
-
-        # grafico_dinamico = StreamlitRenderer(df, spec="./json/vendas.json", spec_io_mode="rw")
-        # renderer = grafico_dinamico
-        # renderer.explorer()
+        grafico_dinamico = StreamlitRenderer(df, spec="./json/vendas.json", spec_io_mode="rw")
+        renderer = grafico_dinamico
+        renderer.explorer()
