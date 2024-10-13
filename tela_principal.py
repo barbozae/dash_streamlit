@@ -184,7 +184,7 @@ class TelaPrincipal:
     def home(self):
         # Use st.markdown() para adicionar um cabeçalho personalizado com HTML e CSS
         st.markdown(
-            f'<h2 style="color:#FF0000;">Vesão Demonstração</h2>',
+            f'<h2 style="color:#FF0000;">Versão Demonstração</h2>',
             unsafe_allow_html=True)
         
         # menu de navegação - é possivel colocar dentro do sideBar
