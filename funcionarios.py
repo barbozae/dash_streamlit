@@ -5,6 +5,7 @@ from datetime import datetime
 from filtro import Filtros
 from conexao import Conexao
 import pandas as pd
+import numpy as np
 import time
 
 
@@ -975,8 +976,8 @@ class FuncResumo:
         self.df_cadastro = consulta
     
         # Filtrando data
-        data_inicial = str(self.filtro.data_inicial)
-        data_final = str(self.filtro.data_final)
+        data_inicial = self.filtro.data_inicial
+        data_final = self.filtro.data_final
 
         df_data_func_ativo = (self.df_funcionario_ativo['data_contratacao'] >= data_inicial) & (self.df_funcionario_ativo['data_contratacao'] <= data_final)
         df_data_func_contratado = (self.df_cadastro['data_contratacao'] >= data_inicial) & (self.df_cadastro['data_contratacao'] <= data_final)
@@ -991,13 +992,21 @@ class FuncResumo:
         self.dataframe_pg_funcionario()
         df = self.valores_pg_func
         df['valor_pago'] = pd.to_numeric(df['valor_pago'])
+        pg_funcionarios = df.loc[df['tipo_pagamento'] != 'rescisao', 'valor_pago'].sum()
+        rescisao = df.loc[df['tipo_pagamento'] == 'rescisao', 'valor_pago'].sum()
+
+        # Verifica se 'self.valor_compras' é uma lista/array e não está vazio antes de acessar o índice 0 pois caso o índice seja zero obtenho um erro logo eu converto para 0
+        valor_compra = self.valor_compras[0] if isinstance(self.valor_compras, (list, np.ndarray)) and len(self.valor_compras) > 0 else self.valor_compras if np.isscalar(self.valor_compras) else 0
+        percentual_mo = (float(pg_funcionarios) / float(pg_funcionarios + valor_compra) * 100) if pg_funcionarios != 0 else 0.0
+        percentual_rescisao = (float(rescisao) / float(rescisao + valor_compra) * 100) if rescisao != 0 else 0.0
 
         # widgets
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric('Funcionário Ativo', '{}'.format(int(df_ativo_func.shape[0])))
         col2.metric('Funcionário Contratado', '{}'.format(int(df_contratado_func.shape[0])))
         col3.metric('Funcionário Desligado', '{}'.format(int(df_desliga_func.shape[0])))
-        col4.metric('Pagamento de Funcionário', '$ {:.2f}'.format(df['valor_pago'].sum()))
+        col4.metric('Pagamento de Funcionário', '$ {:.2f}'.format(pg_funcionarios), '{:.2f}%'.format(percentual_mo))
+        col5.metric('Rescisão de Funcionário', '$ {:.2f}'.format(rescisao), '{:.2f}%'.format(percentual_rescisao))
         
         # Agrupando colunas
         grupo_nome = df.groupby('nome')
