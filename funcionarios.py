@@ -49,7 +49,7 @@ class FuncCadastro:
         self.lista_banco = ['Bradesco', 'Itau', 'Santander', 'Nubank', 'Banco do Brasil',
                                'Caixa Econômica', 'Inter', 'C6 Bank', 'Neon', 'Next', 'Banco Original']
         # Forms pode ser declarado utilizando a sintaxe 'with'
-        with st.form(key='func_cadastro', clear_on_submit=True):
+        with st.form(key='func_cadastro', clear_on_submit=False):
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 self.nome_funcionario = st.text_input(label='Nome', placeholder='Nome do funcionário')
@@ -280,7 +280,7 @@ class FuncAdmissao: # Contratação
         consulta = FuncCadastro.atualizar_func_cadastro()
         self.df_cadastro = consulta
         
-        with st.form(key='func_admissao', clear_on_submit=True):
+        with st.form(key='func_admissao', clear_on_submit=False):
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está vazio ou nulo. Para que tenhamos apenas opções de funcionarios não contratados
@@ -505,7 +505,7 @@ class FuncPagamento:
         self.lista_tipo_pagamento = ['Salário', 'Adiantamento', 'Vale', 'Vale Transporte', 'Extra', 'Rescisão', 'Comissão', 
                                         'Férias', '13° Salário']
         
-        with st.form(key='func_pagamento', clear_on_submit=True):
+        with st.form(key='func_pagamento', clear_on_submit=False):
             col1, col2 = st.columns(2)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está preenchido, me retornando o dataframe inteiro
@@ -759,7 +759,7 @@ class FuncRescisao:
                                              'Término do contrato', 'Rescisão indireta', 'Rescisão por culpa recíproca']
         self.funcionario_ativo()
 
-        with st.form(key='func_rescisao', clear_on_submit=True):
+        with st.form(key='func_rescisao', clear_on_submit=False):
             col1, col2, col3 = st.columns(3)
             with col1:
                 # Filtrando linhas onde 'data_contratacao' está preenchido, me retornando o dataframe inteiro
