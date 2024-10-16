@@ -507,7 +507,7 @@ class Compras:
         self.df_fornecedor = tabela[1]
         classificacao = tabela[2]
         # Forms pode ser declarado utilizando a sintaxe 'with'
-        with st.form(key='lançar_compra', clear_on_submit=True):
+        with st.form(key='lançar_compra', clear_on_submit=False):
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 self.data_compra = st.date_input('Data da Compra', format='DD/MM/YYYY')
@@ -740,31 +740,6 @@ class Compras:
             self.conn.commit()
             cursor.close()
             self.conn.close()
-
-
-
-
-
-            #     # Recarregar os dados do banco de dados usando a mesma conexão
-            # query = "SELECT * FROM compras"
-            # df_atualizado = pd.read_sql(query, self.conn)
-
-            # # Exibir os dados atualizados na página
-            # st.write(df_atualizado)
-
-            # # Fechar a conexão com o banco de dados
-            # cursor.close()
-            # self.conn.close()
-
-            # # Após a atualização, recarrega a página para refletir os novos dados
-            # st.experimental_rerun()
-
-
-
-
-
-            # cursor.close()
-            # self.conn.close()
 
         with col3:
             if st.button('Salvar Alterações'):
