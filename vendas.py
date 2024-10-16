@@ -14,12 +14,6 @@ from filtro import Filtros
 from conexao import Conexao
 
 
-
-#TODO verificar a porcentagem dos indicadores cmv gasto fixo e inserir o valor de rescisao em todos app dos restaurantes
-
-
-
-
 class Vendas: 
     def __init__(self) -> None:
         self.filtro = Filtros()
@@ -156,7 +150,7 @@ class Vendas:
 
     def widget_vendas(self):
         # Forms pode ser declarado utilizando a sintaxe 'with'
-        with st.form(key='lançar_vendas', clear_on_submit=True):
+        with st.form(key='lançar_vendas', clear_on_submit=False):
             # st.title = ('Lançamento de Vendas')
             col1, col2, col3, col4, col5, col6= st.columns(6)
             with col1:
@@ -251,15 +245,7 @@ class Vendas:
             stmt = insert(vendas_table).values(valores)
             # Executando a instrução de INSERT
             self.session.execute(stmt)
-            # Confirmar a transação
             self.session.commit()
-
-
-
-
-
-
-            # Fechando a sessão
             self.session.close()
 
             # precisei criar uma mensagem vazia para depois deixa-la vazia novamente depois de utiliza-la
