@@ -452,6 +452,7 @@ class Compras:
                 col4.write(card, unsafe_allow_html=True)
             
     def cards_resumo_compras(self):
+        self.dataframe_vendas()
         self.dataframe_compras()
         self.dataframe_pagamentos()
         self.dataframe_vencimento()
@@ -482,7 +483,7 @@ class Compras:
 
         # Verifica se 'self.valor_compras' é uma lista/array e não está vazio antes de acessar o índice 0 pois caso o índice seja zero obtenho um erro logo eu converto para 0
         valor_compra = self.valor_compras[0] if isinstance(self.valor_compras, (list, np.ndarray)) and len(self.valor_compras) > 0 else self.valor_compras if np.isscalar(self.valor_compras) else 0
-        col1.metric('Valor de Compra', '${:,.2f}'.format(valor_compra))
+        col1.metric('Valor de Compra', '${:,.2f}'.format(self.total_vendas))
 
         # Verifica se 'self.valor_pagamentos' é escalar ou tem um valor no índice 0
         valor_pagamento = self.valor_pagamentos if np.isscalar(self.valor_pagamentos) else (self.valor_pagamentos[0] if isinstance(self.valor_pagamentos, (list, np.ndarray)) and len(self.valor_pagamentos) > 0 else 0)
@@ -493,9 +494,9 @@ class Compras:
         col3.metric('Valor a Pagar', '${:,.2f}'.format(valor_vencido))
 
         # Calcule os percentuais, garantindo que os valores existam
-        percentual_cmv = (float(self.cmv) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
-        percentual_gasto_fixo = (float(self.gasto_fixo) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
-        percentual_gasto_variavel = (float(self.gasto_variavel) / float(valor_compra + self.pg_funcionarios) * 100) if valor_compra != 0 else 0.0
+        percentual_gasto_fixo = (float(self.gasto_fixo) / float(self.total_vendas) * 100) if self.total_vendas != 0 else 0.0
+        percentual_cmv = (float(self.cmv) / float(self.total_vendas) * 100) if self.total_vendas != 0 else 0.0
+        percentual_gasto_variavel = (float(self.gasto_variavel) / float(self.total_vendas) * 100) if self.total_vendas != 0 else 0.0
 
         # Garantir que os percentuais são float e formatar corretamente
         col4.metric('CMV', '${:,.2f}'.format(float(self.cmv)), '{:.2f}%'.format(percentual_cmv))
@@ -741,6 +742,31 @@ class Compras:
             cursor.close()
             self.conn.close()
 
+
+
+
+
+            #     # Recarregar os dados do banco de dados usando a mesma conexão
+            # query = "SELECT * FROM compras"
+            # df_atualizado = pd.read_sql(query, self.conn)
+
+            # # Exibir os dados atualizados na página
+            # st.write(df_atualizado)
+
+            # # Fechar a conexão com o banco de dados
+            # cursor.close()
+            # self.conn.close()
+
+            # # Após a atualização, recarrega a página para refletir os novos dados
+            # st.experimental_rerun()
+
+
+
+
+
+            # cursor.close()
+            # self.conn.close()
+
         with col3:
             if st.button('Salvar Alterações'):
                 if len(filtro_ID_compras) > 0 or filtro_data_compras is not None:
@@ -839,7 +865,7 @@ class Compras:
                                                  hide_index=True)
             
     def widget_cadastro_fornecedor(self):
-        with st.form(key='cadastrar_fornecedor', clear_on_submit=True):
+        with st.form(key='cadastrar_fornecedor', clear_on_submit=False):
             col1, col2, col3 = st.columns(3)
             with col1:
                 self.nome_fornecedor = st.text_input(label='Fornecedor', placeholder='Digite nome da Empresa')

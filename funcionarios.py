@@ -971,6 +971,7 @@ class FuncRescisao:
 
 class FuncResumo:
     def card_resumo_Fuc(self):
+        self.dataframe_vendas()
         self.funcionario_ativo()
         consulta = FuncCadastro.atualizar_func_cadastro()
         self.df_cadastro = consulta
@@ -995,10 +996,8 @@ class FuncResumo:
         pg_funcionarios = df.loc[df['tipo_pagamento'] != 'rescisao', 'valor_pago'].sum()
         rescisao = df.loc[df['tipo_pagamento'] == 'rescisao', 'valor_pago'].sum()
 
-        # Verifica se 'self.valor_compras' é uma lista/array e não está vazio antes de acessar o índice 0 pois caso o índice seja zero obtenho um erro logo eu converto para 0
-        valor_compra = self.valor_compras[0] if isinstance(self.valor_compras, (list, np.ndarray)) and len(self.valor_compras) > 0 else self.valor_compras if np.isscalar(self.valor_compras) else 0
-        percentual_mo = (float(pg_funcionarios) / float(pg_funcionarios + valor_compra) * 100) if pg_funcionarios != 0 else 0.0
-        percentual_rescisao = (float(rescisao) / float(rescisao + valor_compra) * 100) if rescisao != 0 else 0.0
+        percentual_mo = (float(pg_funcionarios) / self.total_vendas * 100) if self.total_vendas != 0 else 0.0
+        percentual_rescisao = (float(rescisao) / self.total_vendas * 100) if self.total_vendas != 0 else 0.0
 
         # widgets
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -1006,7 +1005,8 @@ class FuncResumo:
         col2.metric('Funcionário Contratado', '{}'.format(int(df_contratado_func.shape[0])))
         col3.metric('Funcionário Desligado', '{}'.format(int(df_desliga_func.shape[0])))
         col4.metric('Pagamento de Funcionário', '$ {:.2f}'.format(pg_funcionarios), '{:.2f}%'.format(percentual_mo))
-        col5.metric('Rescisão de Funcionário', '$ {:.2f}'.format(rescisao), '{:.2f}%'.format(percentual_rescisao))
+        col5.metric('Pagamento de Rescisão', '$ {:.2f}'.format(rescisao), '{:.2f}%'.format(percentual_rescisao))
+
         
         # Agrupando colunas
         grupo_nome = df.groupby('nome')
